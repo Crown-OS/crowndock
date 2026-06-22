@@ -8,9 +8,8 @@ use smithay_client_toolkit::{
     },
 };
 use wayland_client::{
-    globals::registry_queue_init,
-    protocol::{wl_compositor::WlCompositor, wl_output::WlOutput},
-    Connection, EventQueue, QueueHandle,
+    globals::registry_queue_init, protocol::wl_output::WlOutput, Connection, EventQueue,
+    QueueHandle,
 };
 use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1;
 
