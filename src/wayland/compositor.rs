@@ -25,7 +25,9 @@ impl CompositorHandler for Window {
     ) {
     }
 
-    fn frame(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface, _: u32) {}
+    fn frame(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface, _: u32) {
+        self.on_frame();
+    }
 
     fn surface_enter(
         &mut self,

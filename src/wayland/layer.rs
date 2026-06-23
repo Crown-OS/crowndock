@@ -4,7 +4,7 @@ use smithay_client_toolkit::{
 };
 use wayland_client::{Connection, QueueHandle};
 
-use crate::{config, window::Window};
+use crate::window::Window;
 
 impl LayerShellHandler for Window {
     fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &LayerSurface) {
@@ -27,12 +27,8 @@ impl LayerShellHandler for Window {
         }
         self.first_configure = false;
 
-        // Surface-local pill bounds match the inset used by the dock shader.
-        let inset_x = config::DOCK_INSET_X.round() as i32;
-        let inset_y = config::DOCK_INSET_Y.round() as i32;
-        let w = (self.width as i32 - 2 * inset_x).max(0);
-        let h = (self.height as i32 - 2 * inset_y).max(0);
-        self.update_blur_region((inset_x, inset_y, w, h));
+        self.apply_input_region();
+        self.apply_blur_region();
     }
 }
 

@@ -24,6 +24,7 @@ pub struct RectShader {
     pub border_width: f32,
     pub border_color: [f32; 4],
     pub fill_color: [f32; 4],
+    pub y_offset: f32,
 }
 
 impl RectShader {
@@ -116,14 +117,15 @@ impl RectShader {
             border_width: 1.5,
             border_color: [1.0, 1.0, 1.0, 0.22],
             fill_color: [1.0, 1.0, 1.0, 0.04],
+            y_offset: 0.0,
         })
     }
 
     pub fn write_uniforms(&self, queue: &wgpu::Queue, width: u32, height: u32) {
-        let rect_min = [self.inset_x, self.inset_y];
+        let rect_min = [self.inset_x, self.inset_y + self.y_offset];
         let rect_max = [
             (width as f32 - self.inset_x).max(self.inset_x),
-            (height as f32 - self.inset_y).max(self.inset_y),
+            (height as f32 - self.inset_y).max(self.inset_y) + self.y_offset,
         ];
         let half_w = (rect_max[0] - rect_min[0]) * 0.5;
         let half_h = (rect_max[1] - rect_min[1]) * 0.5;
