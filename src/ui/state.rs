@@ -1,28 +1,42 @@
 use std::path::PathBuf;
 
-#[derive(Debug, Clone)]
+use vello::peniko::ImageData;
+
+use crate::ui::icon;
+
 pub struct Icon {
     pub path: PathBuf,
+    pub image: Option<ImageData>,
 }
 
 impl Icon {
     pub fn new(path: PathBuf) -> Self {
-        Self { path }
+        let image = match icon::load_from_desktop(&path) {
+            Ok(img) => Some(img),
+            Err(e) => {
+                log::warn!("icon load failed for {}: {e}", path.display());
+                None
+            }
+        };
+        Self { path, image }
     }
 
-    /// Deterministic color derived from the desktop file path so each icon
-    /// is visually distinct until real artwork is loaded.
-    pub fn color(&self) -> [f32; 4] {
-        let bytes = self.path.as_os_str().to_string_lossy().into_owned().into_bytes();
+    /// Deterministic fallback color used when the .desktop file has no
+    /// resolvable icon — keeps the slot visible instead of going blank.
+    pub fn fallback_color(&self) -> [f32; 4] {
+        let bytes = self
+            .path
+            .as_os_str()
+            .to_string_lossy()
+            .into_owned()
+            .into_bytes();
         let mut hash: u32 = 0x811c_9dc5;
         for b in bytes {
             hash ^= b as u32;
             hash = hash.wrapping_mul(0x0100_0193);
         }
         let h = (hash & 0xFF) as f32 / 255.0;
-        let s = 0.55;
-        let v = 0.95;
-        let (r, g, b) = hsv_to_rgb(h, s, v);
+        let (r, g, b) = hsv_to_rgb(h, 0.55, 0.95);
         [r, g, b, 1.0]
     }
 }
@@ -43,9 +57,38 @@ fn hsv_to_rgb(h: f32, s: f32, v: f32) -> (f32, f32, f32) {
     }
 }
 
+/// Snapshot describing the icon currently being dragged, in render-ready
+/// form so the UI layer doesn't need to know about timing or input state.
+#[derive(Clone)]
+pub struct DragRender {
+    pub path: PathBuf,
+    pub image: Option<ImageData>,
+    pub cx: f32,
+    pub cy: f32,
+    pub scale: f32,
+    pub alpha: f32,
+}
+
+/// An icon that is animating out (was dragged off the dock and released).
+/// Owns its own image data because the corresponding `Icon` is already gone
+/// from `icons` by the time we draw the animation.
+#[derive(Clone)]
+pub struct Vanishing {
+    pub path: PathBuf,
+    pub image: Option<ImageData>,
+    pub cx: f32,
+    pub cy: f32,
+    pub radius: f32,
+    pub scale: f32,
+    pub alpha: f32,
+}
+
 #[derive(Default)]
 pub struct State {
     pub icons: Vec<Icon>,
+    pub drag_skip_idx: Option<usize>,
+    pub drag_render: Option<DragRender>,
+    pub vanishing: Vec<Vanishing>,
 }
 
 impl State {

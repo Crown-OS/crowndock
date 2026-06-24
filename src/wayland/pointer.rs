@@ -7,6 +7,9 @@ use wayland_client::{Connection, QueueHandle, protocol::wl_pointer};
 
 use crate::window::Window;
 
+/// Linux input-event-codes BTN_LEFT.
+const BTN_LEFT: u32 = 0x110;
+
 impl PointerHandler for Window {
     fn pointer_frame(
         &mut self,
@@ -20,9 +23,17 @@ impl PointerHandler for Window {
             if event.surface != dock_surface {
                 continue;
             }
+            let (x, y) = event.position;
             match event.kind {
                 PointerEventKind::Enter { .. } => self.on_pointer_enter(),
                 PointerEventKind::Leave { .. } => self.on_pointer_leave(),
+                PointerEventKind::Motion { .. } => self.on_pointer_motion(x, y),
+                PointerEventKind::Press { button, .. } if button == BTN_LEFT => {
+                    self.on_pointer_press(x, y)
+                }
+                PointerEventKind::Release { button, .. } if button == BTN_LEFT => {
+                    self.on_pointer_release(x, y)
+                }
                 _ => {}
             }
         }

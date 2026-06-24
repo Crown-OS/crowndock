@@ -13,6 +13,7 @@ use smithay_client_toolkit::{
         },
         Connection, QueueHandle,
     },
+    shell::WaylandSurface,
 };
 
 use crate::window::{DragOfferRead, Window};
@@ -27,8 +28,17 @@ impl DataDeviceHandler for Window {
         _: &WlDataDevice,
         _x: f64,
         _y: f64,
-        _: &WlSurface,
+        surface: &WlSurface,
     ) {
+        if surface != self.layer.wl_surface() {
+            return;
+        }
+
+        // wl_pointer events are suppressed during DnD, so drive the same
+        // show/hide state machine off the data_device focus instead — this is
+        // what lets the dock reveal when an icon is dragged to the bottom.
+        self.on_pointer_enter();
+
         let Some(dd) = self.data_device.as_ref() else {
             return;
         };
@@ -48,7 +58,9 @@ impl DataDeviceHandler for Window {
         }
     }
 
-    fn leave(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlDataDevice) {}
+    fn leave(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlDataDevice) {
+        self.on_pointer_leave();
+    }
 
     fn motion(
         &mut self,
