@@ -164,7 +164,7 @@ impl Window {
 
         let state = Self {
             ui: None,
-            state: State::default(),
+            state: State::load(),
             registry_state: RegistryState::new(&globals),
             output_state: OutputState::new(&globals, &qh),
             seat_state,
@@ -263,7 +263,34 @@ impl Window {
         let h = (self.height as i32 - 2 * inset_y).max(0);
         let y_offset = self.y_offset_px().round() as i32;
         if w > 0 && h > 0 {
-            region.add(inset_x, inset_y + y_offset, w, h);
+            // wl_region is a union of rectangles, so slice the rounded pill
+            // into horizontal strips whose inset follows the corner radius
+            // used by rect.wgsl (r = min(w, h) / 2).
+            const STRIPS: i32 = 32;
+            let r = (w.min(h) as f32) * 0.5;
+            let cy = h as f32 * 0.5;
+            let flat_half_h = (h as f32 * 0.5 - r).max(0.0);
+            for i in 0..STRIPS {
+                let y_top = i * h / STRIPS;
+                let y_bot = (i + 1) * h / STRIPS;
+                if y_bot <= y_top {
+                    continue;
+                }
+                let y_mid = (y_top + y_bot) as f32 * 0.5;
+                let cap_excess = ((y_mid - cy).abs() - flat_half_h).clamp(0.0, r);
+                let half_chord = (r * r - cap_excess * cap_excess).max(0.0).sqrt();
+                let inset = (r - half_chord).round() as i32;
+                let strip_w = (w - 2 * inset).max(0);
+                if strip_w == 0 {
+                    continue;
+                }
+                region.add(
+                    inset_x + inset,
+                    inset_y + y_offset + y_top,
+                    strip_w,
+                    y_bot - y_top,
+                );
+            }
         }
         effect_surface.set_blur_region(Some(region.wl_region()));
         self.layer.commit();
@@ -435,10 +462,9 @@ impl Window {
     }
 
     fn start_vanish(&mut self, drag: &IconDrag, x: f64, y: f64) {
-        if drag.icon_idx >= self.state.icons.len() {
+        let Some(icon) = self.state.remove_icon(drag.icon_idx) else {
             return;
-        }
-        let icon = self.state.icons.remove(drag.icon_idx);
+        };
         let layout = compute_layout(
             self.state.icons.len().max(1),
             self.width,

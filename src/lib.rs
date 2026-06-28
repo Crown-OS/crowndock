@@ -1,4 +1,5 @@
 mod config;
+mod persistence;
 mod renderer;
 mod ui;
 mod wayland;

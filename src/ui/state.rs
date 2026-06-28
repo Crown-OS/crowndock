@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use vello::peniko::ImageData;
 
-use crate::ui::icon;
+use crate::{persistence, ui::icon};
 
 pub struct Icon {
     pub path: PathBuf,
@@ -92,10 +92,41 @@ pub struct State {
 }
 
 impl State {
+    /// Build a fresh `State` populated with whatever pinned items are
+    /// persisted under the user's XDG config dir, in saved order.
+    pub fn load() -> Self {
+        let icons = persistence::load_items()
+            .into_iter()
+            .map(Icon::new)
+            .collect();
+        Self {
+            icons,
+            ..Self::default()
+        }
+    }
+
     pub fn add_icon(&mut self, path: PathBuf) {
         if self.icons.iter().any(|i| i.path == path) {
             return;
         }
         self.icons.push(Icon::new(path));
+        self.persist();
+    }
+
+    /// Remove the icon at `idx`, returning it. Persists the new order.
+    pub fn remove_icon(&mut self, idx: usize) -> Option<Icon> {
+        if idx >= self.icons.len() {
+            return None;
+        }
+        let icon = self.icons.remove(idx);
+        self.persist();
+        Some(icon)
+    }
+
+    fn persist(&self) {
+        let paths: Vec<PathBuf> = self.icons.iter().map(|i| i.path.clone()).collect();
+        if let Err(e) = persistence::save_items(&paths) {
+            log::warn!("persist dock items: {e:#}");
+        }
     }
 }
