@@ -4,32 +4,30 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+crownshell = { git = "https://github.com/crown-os/crownshell" }
+
+anyhow = "1.0.102"
+log = "0.4"
+env_logger = "0.11"
+tracing = "0.1.44"
+
+vello = "0.9.0"
 smithay-client-toolkit = { version = "0.19", features = ["calloop"] }
-wayland-client = "0.31"
-wayland-protocols = { version = "0.32", features = ["client", "staging"] }
-calloop = "0.13"
-calloop-wayland-source = "0.3"
+
 tiny-skia = "0.11"
 usvg = "0.43"
 resvg = "0.43"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp"] }
+image = { version = "0.25", default-features = false, features = [
+  "png",
+  "jpeg",
+  "webp",
+  "bmp",
+] }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 dirs = "5"
-notify = "6"
 freedesktop_entry_parser = "1.3"
 freedesktop-icons = "0.4"
-libc = "0.2"
-thiserror = "1.0"
-log = "0.4"
-env_logger = "0.11"
-vello = "0.9.0"
-anyhow = "1.0.102"
-tracing = "0.1.44"
-vello_shaders = "0.9.0"
-winit = "0.30.13"
-pollster = "0.4"
-bytemuck = { version = "1", features = ["derive"] }
 
 [profile.release]
 lto = "thin"
