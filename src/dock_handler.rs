@@ -11,9 +11,8 @@ use crate::{
         SPRING_POSITION_EPSILON, SPRING_STIFFNESS, SPRING_SUBSTEP, SPRING_VELOCITY_EPSILON,
     },
     ui::{
-        build_scene, compute_layout,
+        State, build_scene, compute_layout,
         state::{DragRender, Vanishing},
-        State,
     },
 };
 
@@ -103,7 +102,8 @@ impl DockHandler {
         let mut remaining = dt;
         while remaining > 0.0 {
             let h = remaining.min(SPRING_SUBSTEP);
-            let accel = -SPRING_STIFFNESS * (self.position - target) - SPRING_DAMPING * self.velocity;
+            let accel =
+                -SPRING_STIFFNESS * (self.position - target) - SPRING_DAMPING * self.velocity;
             self.velocity += accel * h;
             self.position += self.velocity * h;
             remaining -= h;

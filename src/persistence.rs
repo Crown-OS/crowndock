@@ -49,26 +49,22 @@ pub fn save_items(items: &[PathBuf]) -> Result<()> {
     let parent = path
         .parent()
         .context("config path has no parent directory")?;
-    std::fs::create_dir_all(parent)
-        .with_context(|| format!("create {}", parent.display()))?;
+    std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
 
     let stored = StoredItems {
         items: items.to_vec(),
     };
     let text = toml::to_string_pretty(&stored)?;
-    write_atomic(&path, text.as_bytes())
-        .with_context(|| format!("write {}", path.display()))
+    write_atomic(&path, text.as_bytes()).with_context(|| format!("write {}", path.display()))
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let parent = path.parent().ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, "no parent dir")
-    })?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "no parent dir"))?;
     let file_name = path
         .file_name()
-        .ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::InvalidInput, "no file name")
-        })?
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "no file name"))?
         .to_string_lossy();
     let tmp = parent.join(format!(".{file_name}.tmp"));
     std::fs::write(&tmp, bytes)?;

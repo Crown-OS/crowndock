@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ci:
+    uses: Crown-OS/.github/.github/workflows/rust.yml@main
+    with:
+      # crowndock depends on crownshell by published version. Until that version is
+      # on crates.io, rust.yml has to clone it as a sibling and write the
+      # [patch.crates-io] overlay -- which is exactly what `siblings` does.
+      # Drop this line once crownshell 0.3.0 is published.
+      siblings: crownshell

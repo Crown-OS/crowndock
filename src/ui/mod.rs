@@ -2,11 +2,11 @@ pub mod icon;
 pub mod state;
 
 use vello::{
+    Scene,
     kurbo::{Affine, Circle, Point, Rect, RoundedRect, Stroke},
     peniko::{
-        color::DynamicColor, Color, ColorStop, ColorStops, Extend, Fill, Gradient, ImageBrush,
+        Color, ColorStop, ColorStops, Extend, Fill, Gradient, ImageBrush, color::DynamicColor,
     },
-    Scene,
 };
 
 pub use state::State;

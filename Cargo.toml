@@ -2,14 +2,22 @@
 name = "crowndock"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+authors = ["marvelxcodes <ramakrishnan0046@gmail.com>"]
+repository = "https://github.com/Crown-OS/crowndock"
+homepage = "https://github.com/Crown-OS/crowndock"
+description = "Application dock for CrownOS."
+keywords = ["crownos", "wayland", "dock", "layershell", "desktop"]
+categories = ["gui", "os::linux-apis"]
+readme = "README.md"
+documentation = "https://docs.rs/crowndock"
 
 [dependencies]
-crownshell = { git = "https://github.com/crown-os/crownshell" }
+crownshell = "0.3"
 
-anyhow = "1.0.102"
+anyhow = "1.0.104"
 log = "0.4"
-env_logger = "0.11"
-tracing = "0.1.44"
 
 vello = "0.9.0"
 smithay-client-toolkit = { version = "0.19", features = ["calloop"] }
@@ -23,7 +31,7 @@ image = { version = "0.25", default-features = false, features = [
   "webp",
   "bmp",
 ] }
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
 toml = "0.8"
 dirs = "5"
 freedesktop_entry_parser = "1.3"

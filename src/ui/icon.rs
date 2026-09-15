@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use freedesktop_entry_parser::parse_entry;
 use vello::peniko::{Blob, ImageAlphaType, ImageData, ImageFormat};
 
