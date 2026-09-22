@@ -399,6 +399,7 @@ dependencies = [
  "image",
  "log",
  "resvg",
+ "rustix 1.1.4",
  "serde",
  "smithay-client-toolkit",
  "tiny-skia",
@@ -409,8 +410,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "crownshell"
+name = "crownos-protocols"
 version = "0.1.0"
+dependencies = [
+ "bitflags 2.13.0",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-scanner",
+]
+
+[[package]]
+name = "crownshell"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "battery",
@@ -419,16 +430,19 @@ dependencies = [
  "calloop",
  "calloop-wayland-source",
  "chrono",
+ "crownos-protocols",
  "env_logger",
  "log",
  "parley",
  "pollster",
+ "rustix 1.1.4",
  "smithay-client-toolkit",
  "tracing",
  "vello",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
+ "wayland-protocols-wlr",
 ]
 
 [[package]]

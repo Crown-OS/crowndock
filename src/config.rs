@@ -4,6 +4,10 @@ pub static WINDOW_TITLE: &str = "Crowndock";
 pub static WINDOW_WIDTH: u32 = 1044;
 pub static WINDOW_HEIGHT: u32 = 100;
 
+pub const ICON_PADDING_Y: f32 = 10.0;
+pub const MIN_ICON_GAP: f32 = 8.0;
+pub const PILL_BORDER_WIDTH: f64 = 0.5;
+
 /// Horizontal inset of the dock pill from the layer surface edges.
 pub const DOCK_INSET_X: f32 = 16.0;
 /// Vertical inset of the dock pill from the layer surface edges.

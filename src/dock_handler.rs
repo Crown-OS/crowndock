@@ -1,7 +1,11 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use crownshell::{DragOffer, DropPayload, Scene, SurfaceCtx, SurfaceHandler};
+use crownshell::{
+    Blur, DEFAULT_BLUR_RADIUS, DragOffer, DropPayload, MaterialSpec, Scene, SurfaceCtx,
+    SurfaceHandler,
+    kurbo::Rect,
+};
 use smithay_client_toolkit::{compositor::Region, shell::WaylandSurface};
 use vello::peniko::ImageData;
 
@@ -15,11 +19,11 @@ use crate::{
         state::{DragRender, Vanishing},
         State,
     },
+    util::uri_to_path,
 };
 
 pub const ICON_DRAG_THRESHOLD: f32 = 6.0;
 pub const VANISH_DURATION: f32 = 0.30;
-const BLUR_STRIPS: i32 = 32;
 const URI_LIST_MIME: &str = "text/uri-list";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,7 +107,8 @@ impl DockHandler {
         let mut remaining = dt;
         while remaining > 0.0 {
             let h = remaining.min(SPRING_SUBSTEP);
-            let accel = -SPRING_STIFFNESS * (self.position - target) - SPRING_DAMPING * self.velocity;
+            let accel =
+                -SPRING_STIFFNESS * (self.position - target) - SPRING_DAMPING * self.velocity;
             self.velocity += accel * h;
             self.position += self.velocity * h;
             remaining -= h;
@@ -150,50 +155,34 @@ impl DockHandler {
         ctx.layer
             .wl_surface()
             .set_input_region(Some(region.wl_region()));
-        ctx.layer.commit();
         self.last_input_kind = Some(desired);
     }
 
+    /// Blurs the backdrop under the dock's stadium.
+    ///
+    /// One rounded rectangle, because the compositor evaluates it as a signed
+    /// distance field: the corners are antialiased at the output's real
+    /// resolution rather than approximated by a ladder of strips.
     fn apply_blur_region(&self, ctx: &SurfaceCtx<'_>) {
-        let Some(effect) = ctx.bg_effect_surface else {
+        let width = (ctx.size.0 as f64 - 2.0 * f64::from(DOCK_INSET_X)).max(0.0);
+        let height = (ctx.size.1 as f64 - 2.0 * f64::from(DOCK_INSET_Y)).max(0.0);
+        if width <= 0.0 || height <= 0.0 {
             return;
-        };
-        let Ok(region) = Region::new(ctx.compositor_state) else {
-            return;
-        };
-        let inset_x = DOCK_INSET_X.round() as i32;
-        let inset_y = DOCK_INSET_Y.round() as i32;
-        let w = (ctx.size.0 as i32 - 2 * inset_x).max(0);
-        let h = (ctx.size.1 as i32 - 2 * inset_y).max(0);
-        let y_offset = self.y_offset_px().round() as i32;
-        if w > 0 && h > 0 {
-            let r = (w.min(h) as f32) * 0.5;
-            let cy = h as f32 * 0.5;
-            let flat_half_h = (h as f32 * 0.5 - r).max(0.0);
-            for i in 0..BLUR_STRIPS {
-                let y_top = i * h / BLUR_STRIPS;
-                let y_bot = (i + 1) * h / BLUR_STRIPS;
-                if y_bot <= y_top {
-                    continue;
-                }
-                let y_mid = (y_top + y_bot) as f32 * 0.5;
-                let cap_excess = ((y_mid - cy).abs() - flat_half_h).clamp(0.0, r);
-                let half_chord = (r * r - cap_excess * cap_excess).max(0.0).sqrt();
-                let inset = (r - half_chord).round() as i32;
-                let strip_w = (w - 2 * inset).max(0);
-                if strip_w == 0 {
-                    continue;
-                }
-                region.add(
-                    inset_x + inset,
-                    inset_y + y_offset + y_top,
-                    strip_w,
-                    y_bot - y_top,
-                );
-            }
         }
-        effect.set_blur_region(Some(region.wl_region()));
-        ctx.layer.commit();
+        let top = f64::from(DOCK_INSET_Y) + f64::from(self.y_offset_px());
+        let left = f64::from(DOCK_INSET_X);
+        let stadium = Rect::new(left, top, left + width, top + height)
+            .to_rounded_rect(width.min(height) / 2.0);
+        ctx.set_material(
+            &[stadium],
+            &MaterialSpec {
+                blur: Some(Blur {
+                    radius: DEFAULT_BLUR_RADIUS,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
     }
 
     fn sync_state_snapshots(&mut self) {
@@ -363,6 +352,12 @@ impl SurfaceHandler for DockHandler {
             return false;
         };
         if !drag.armed {
+            let Some(layout) = compute_layout(self.state.icons.len(), self.width, self.height) else {
+                return false;
+            };
+            if let Some(idx) = layout.hit_test(x as f32, y as f32, self.y_offset_px()) {
+                let icon = self.state.icons.get(idx);
+            }
             return true;
         }
         let interior_top = DOCK_INSET_Y + self.y_offset_px();
@@ -465,37 +460,5 @@ impl SurfaceHandler for DockHandler {
 
         self.drop_finished_vanish();
         self.animation_in_flight()
-    }
-}
-
-fn uri_to_path(uri: &str) -> Option<PathBuf> {
-    let rest = uri.strip_prefix("file://")?;
-    Some(PathBuf::from(percent_decode(rest)))
-}
-
-fn percent_decode(input: &str) -> String {
-    let bytes = input.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let (Some(h), Some(l)) = (hex(bytes[i + 1]), hex(bytes[i + 2])) {
-                out.push((h << 4) | l);
-                i += 3;
-                continue;
-            }
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
-fn hex(b: u8) -> Option<u8> {
-    match b {
-        b'0'..=b'9' => Some(b - b'0'),
-        b'a'..=b'f' => Some(b - b'a' + 10),
-        b'A'..=b'F' => Some(b - b'A' + 10),
-        _ => None,
     }
 }

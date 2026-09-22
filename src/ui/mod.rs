@@ -11,11 +11,7 @@ use vello::{
 
 pub use state::State;
 
-use crate::config::{DOCK_INSET_X, DOCK_INSET_Y};
-
-const ICON_PADDING_Y: f32 = 10.0;
-const MIN_ICON_GAP: f32 = 8.0;
-const PILL_BORDER_WIDTH: f64 = 1.5;
+use crate::config::{DOCK_INSET_X, DOCK_INSET_Y, ICON_PADDING_Y, MIN_ICON_GAP, PILL_BORDER_WIDTH};
 
 pub fn build_scene(scene: &mut Scene, state: &State, size: (u32, u32), y_offset: f32) {
     scene.reset();
@@ -69,17 +65,38 @@ fn draw_pill(scene: &mut Scene, width: u32, height: u32, y_offset: f32) {
     }
     let radius = (w.min(h) * 0.5).max(0.0);
     let rr = RoundedRect::new(x0, y0, x1, y1, radius);
-    scene.fill(
-        Fill::NonZero,
+
+    let shadow_dy = (h * 0.06).max(4.0);
+    let shadow_blur = (h * 0.20).max(12.0);
+    let shadow_rect = Rect::new(x0, y0 + shadow_dy, x1, y1 + shadow_dy);
+    scene.draw_blurred_rounded_rect(
         Affine::IDENTITY,
-        Color::from_rgba8(255, 255, 255, 102),
+        shadow_rect,
+        Color::from_rgba8(0, 0, 0, 20),
+        radius,
+        shadow_blur,
+    );
+
+    scene.fill(
+        Fill::EvenOdd,
+        Affine::IDENTITY,
+        Color::from_rgba8(255, 255, 255, 30),
         None,
         &rr,
     );
+
+    let border = Gradient::new_linear(Point::new(x0, y0), Point::new(x0, y1))
+        .with_extend(Extend::Pad)
+        .with_stops(make_stops([
+            (0.0, [0.0, 0.0, 0.0, 0.35]),
+            (0.15, [0.0, 0.0, 0.0, 0.12]),
+            (0.55, [0.0, 0.0, 0.0, 0.04]),
+            (1.0, [0.0, 0.0, 0.0, 0.28]),
+        ]));
     scene.stroke(
         &Stroke::new(PILL_BORDER_WIDTH),
         Affine::IDENTITY,
-        Color::from_rgba8(255, 255, 255, 56),
+        &border,
         None,
         &rr,
     );
@@ -172,19 +189,33 @@ fn draw_icon(
 
     let shadow_dy = (r * 0.10).max(2.0);
     let shadow_blur = (r * 0.30).max(4.0);
-    let shadow_rect = Rect::new(
-        bounds.x0,
-        bounds.y0 + shadow_dy,
-        bounds.x1,
-        bounds.y1 + shadow_dy,
+    let shadow_outer = r + shadow_blur;
+    let shadow_cy = cy_f + shadow_dy;
+    let shadow_bounds = Rect::new(
+        cx_f - shadow_outer,
+        shadow_cy - shadow_outer,
+        cx_f + shadow_outer,
+        shadow_cy + shadow_outer,
     );
-    let shadow_alpha = ((110.0 * alpha) as u32).min(255) as u8;
-    scene.draw_blurred_rounded_rect(
+    let core_stop = (r / shadow_outer) as f32;
+    let shadow = Gradient::new_two_point_radial(
+        Point::new(cx_f, shadow_cy),
+        0.0,
+        Point::new(cx_f, shadow_cy),
+        shadow_outer as f32,
+    )
+    .with_extend(Extend::Pad)
+    .with_stops(make_stops([
+        (0.0, [0.0, 0.0, 0.0, 0.35 * alpha]),
+        (core_stop, [0.0, 0.0, 0.0, 0.22 * alpha]),
+        (1.0, [0.0, 0.0, 0.0, 0.0]),
+    ]));
+    scene.fill(
+        Fill::NonZero,
         Affine::IDENTITY,
-        shadow_rect,
-        Color::from_rgba8(0, 0, 0, shadow_alpha),
-        r,
-        shadow_blur,
+        &shadow,
+        None,
+        &shadow_bounds,
     );
 
     scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &circle);
