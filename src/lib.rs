@@ -1,29 +1,43 @@
-mod config;
-mod dock_handler;
-mod persistence;
-mod runtime;
-mod ui;
+mod desktop_entry;
+mod dock;
+mod icon;
+mod launcher;
+pub mod settings;
 mod util;
 
-use anyhow::Result;
-use crownshell::{Anchor, KeyboardInteractivity, Layer, WindowConfig};
+use anyhow::{Context, Result};
+use crownui::{
+    AppConfig,
+    prelude::{Anchor, KeyboardInteractivity, LayerExtent, LayerOptions, TRANSPARENT},
+};
 
-use config::{WINDOW_HEIGHT, WINDOW_TITLE, WINDOW_WIDTH};
-use dock_handler::DockHandler;
+use dock::Tint;
+use settings::{DockSettings, Metrics};
+
+const NAMESPACE: &str = "crowndock";
+/// Width the surface starts at until the compositor stretches it across the output.
+const FALLBACK_WIDTH: u32 = 1280;
 
 pub fn app() -> Result<()> {
-    crownshell::run(|app| {
-        let config = WindowConfig {
-            namespace: WINDOW_TITLE.to_string(),
-            layer: Layer::Overlay,
-            anchor: Anchor::BOTTOM,
-            size: (WINDOW_WIDTH, WINDOW_HEIGHT),
-            exclusive_zone: 0,
-            keyboard_interactivity: KeyboardInteractivity::None,
-            blur: true,
-            ..Default::default()
-        };
-        app.create_window(config, DockHandler::new());
-        Ok(())
-    })
+    let settings: DockSettings = crownconfig::load_section(DockSettings::SECTION);
+    let metrics = Metrics::new(&settings);
+    let tint = Tint::new(crownconfig::load_appearance().dark_mode);
+    let height = metrics.surface_height();
+    let reserved = if settings.autohide {
+        0
+    } else {
+        metrics.reserved()
+    };
+    let layer = LayerOptions::new(NAMESPACE, Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT)
+        .layer(settings.layer.into())
+        .height(LayerExtent::Fixed(height))
+        .exclusive_zone(reserved)
+        .keyboard(KeyboardInteractivity::None);
+    let config = AppConfig::new("CrownDock")
+        .app_id(NAMESPACE)
+        .size(FALLBACK_WIDTH, height)
+        .clear_color(TRANSPARENT)
+        .accessibility(false)
+        .layer(layer);
+    crownui::run(dock::root(settings, metrics, tint), config).context("the dock stopped")
 }
