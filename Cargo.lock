@@ -246,6 +246,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "crownconfig",
+ "crowntest",
  "crownui",
  "env_logger",
  "freedesktop-icons",
@@ -278,6 +279,20 @@ dependencies = [
  "wayland-backend",
  "wayland-client",
  "wayland-scanner",
+]
+
+[[package]]
+name = "crowntest"
+version = "0.1.0"
+dependencies = [
+ "geometry",
+ "graphics",
+ "input",
+ "runtime",
+ "semantics",
+ "taffy-layout",
+ "view",
+ "windowing",
 ]
 
 [[package]]

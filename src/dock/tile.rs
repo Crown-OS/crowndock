@@ -8,14 +8,14 @@ use crownui::{
 };
 
 use super::{
-    drag,
+    app_icons, drag,
     slots::{Slot, SlotKey},
     state::Dock,
 };
-use crate::launcher;
 
 const PRESSED_SCALE: f32 = 0.9;
-const PLACEHOLDER_CORNER: f32 = 0.22;
+/// An icon's corner radius as a share of its edge.
+pub const PLACEHOLDER_CORNER: f32 = 0.22;
 
 /// One place in the row: a pinned app, or the gap a drag would land in.
 pub fn tile(cx: &mut Cx, dock: Dock, slot: Signal<Slot>) -> AnyView {
@@ -26,11 +26,12 @@ pub fn tile(cx: &mut Cx, dock: Dock, slot: Signal<Slot>) -> AnyView {
     }
 }
 
-/// Grows from its foot when hovered, sinks when pressed, launches on click and lifts out of the
-/// dock when dragged. Appearing and leaving, it scales from and to nothing on the render thread.
+/// Grows from its foot when hovered, sinks when pressed, opens the app on click and lifts out of
+/// the dock when dragged. Appearing and leaving, it scales from and to nothing on the render
+/// thread.
 fn app(dock: Dock, slot: Signal<Slot>, path: PathBuf) -> impl View {
     let metrics = dock.metrics;
-    let launch = path.clone();
+    let clicked = path.clone();
     keyed(
         move |runtime| slot.with(runtime, |slot| slot.image),
         move |_, image| art(image, metrics.icon),
@@ -41,7 +42,7 @@ fn app(dock: Dock, slot: Signal<Slot>, path: PathBuf) -> impl View {
     .active(|style| style.scale(PRESSED_SCALE))
     .enter(|style| style.scale(0.0).opacity(0.0))
     .exit(|style| style.scale(0.0).opacity(0.0))
-    .on_click(move |_, _| launcher::launch(launch.clone()))
+    .on_click(move |cx, _| app_icons::open(cx, dock, &clicked))
     .on_drag_start(move |cx, event| drag::lift(cx, dock, &path, event.position))
 }
 

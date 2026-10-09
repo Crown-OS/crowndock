@@ -70,8 +70,7 @@ pub fn arrange(
 
 /// The gap a drag at `x` opens among `shown` icons, in a row centred on `center`.
 pub fn gap_index(x: f32, center: f32, shown: usize, metrics: &Metrics) -> usize {
-    let tiles = (shown + 1) as f32;
-    let left = center - (tiles * metrics.step() - metrics.spacing) / 2.0;
+    let left = center - metrics.row_width(shown + 1) / 2.0;
     ((x - left) / metrics.step())
         .floor()
         .clamp(0.0, shown as f32) as usize

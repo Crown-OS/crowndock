@@ -20,6 +20,7 @@ resvg = { version = "0.48", default-features = false }
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 [dev-dependencies]
+crowntest = { path = "../crownui/crowntest" }
 ron = "0.12"
 
 [profile.release]

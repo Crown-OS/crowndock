@@ -11,6 +11,7 @@ const FIELD_CODES: [&str; 7] = ["%f", "%F", "%u", "%U", "%i", "%c", "%k"];
 pub struct DesktopEntry {
     pub icon: Option<String>,
     exec: Option<String>,
+    startup_wm_class: Option<String>,
 }
 
 impl DesktopEntry {
@@ -21,6 +22,7 @@ impl DesktopEntry {
         Ok(Self {
             icon: section.attr("Icon").map(str::to_owned),
             exec: section.attr("Exec").map(str::to_owned),
+            startup_wm_class: section.attr("StartupWMClass").map(str::to_owned),
         })
     }
 
@@ -33,6 +35,15 @@ impl DesktopEntry {
             .collect();
         (!arguments.is_empty()).then_some(arguments)
     }
+}
+
+/// The app_id the windows of the application `desktop_file` describes are expected to set: its
+/// `StartupWMClass`, or else the file's name without `.desktop`.
+pub fn app_id(desktop_file: &Path) -> Option<String> {
+    DesktopEntry::read(desktop_file)
+        .ok()
+        .and_then(|entry| entry.startup_wm_class)
+        .or_else(|| Some(desktop_file.file_stem()?.to_str()?.to_owned()))
 }
 
 /// Splits an `Exec=` value into arguments, honouring double quotes and backslash escapes.
@@ -74,6 +85,7 @@ mod tests {
         DesktopEntry {
             icon: None,
             exec: Some(exec.to_owned()),
+            startup_wm_class: None,
         }
         .command()
     }
@@ -88,6 +100,39 @@ mod tests {
                 "/opt/app dir/app".to_owned(),
                 "--name=%".to_owned(),
             ])
+        );
+    }
+
+    #[test]
+    fn the_app_id_is_the_startup_wm_class_when_there_is_one() {
+        let directory =
+            std::env::temp_dir().join(format!("crowndock-app-id-{}", std::process::id()));
+        let classed = directory.join("org.example.Classed.desktop");
+        let unclassed = directory.join("org.gnome.Nautilus.desktop");
+        let written = std::fs::create_dir_all(&directory)
+            .and_then(|()| {
+                std::fs::write(
+                    &classed,
+                    "[Desktop Entry]\nName=Classed\nExec=classed\nStartupWMClass=classed-window\n",
+                )
+            })
+            .and_then(|()| {
+                std::fs::write(&unclassed, "[Desktop Entry]\nName=Files\nExec=nautilus\n")
+            });
+        if let Err(error) = written {
+            panic!("write the test entries: {error}");
+        }
+        let ids = (app_id(&classed), app_id(&unclassed));
+        let _ = std::fs::remove_dir_all(&directory);
+        assert_eq!(ids.0.as_deref(), Some("classed-window"));
+        assert_eq!(ids.1.as_deref(), Some("org.gnome.Nautilus"));
+    }
+
+    #[test]
+    fn an_unreadable_entry_is_known_by_its_file_name() {
+        assert_eq!(
+            app_id(Path::new("/nonexistent/org.example.Gone.desktop")).as_deref(),
+            Some("org.example.Gone")
         );
     }
 

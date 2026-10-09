@@ -2,6 +2,7 @@
 //! reveals the dock, the compositor's glass and the row of icons. The root takes no pointer
 //! input itself, so the surface's input region is only the strip and the dock.
 
+mod app_icons;
 mod drag;
 mod glass;
 mod icons;
@@ -37,6 +38,7 @@ pub fn root(settings: DockSettings, metrics: Metrics, tint: Tint) -> impl View {
         zstack((
             probe::size_probe(dock.surface).absolute().inset(0.0),
             icon_loader(dock),
+            app_icons::reporter(dock),
             trigger(dock),
             body(dock, tint),
             row(dock),
@@ -84,12 +86,8 @@ fn trigger(dock: Dock) -> impl View {
         }))
 }
 
-/// How far above the screen edge the dock's foot is: its margin when up, its whole height
-/// below the edge when hidden.
 fn lift(dock: Dock, runtime: &mut Runtime) -> f32 {
-    let metrics = dock.metrics;
-    let reveal = dock.reveal.get(runtime);
-    metrics.margin - (1.0 - reveal) * (metrics.margin + metrics.pill_height())
+    dock.metrics.lift(dock.reveal.get(runtime))
 }
 
 fn hidden(dock: Dock) -> impl FnMut(&mut Runtime) -> bool {
@@ -127,9 +125,10 @@ fn body(dock: Dock, tint: Tint) -> impl View {
 /// spring; the UI thread only lays them out once per change.
 fn row(dock: Dock) -> impl View {
     let metrics = dock.metrics;
-    let icons = hstack(for_each(dock.slots, Slot::key, move |cx, slot| {
+    let icons = for_each(dock.slots, Slot::key, move |cx, slot| {
         tile::tile(cx, dock, slot)
-    }))
+    })
+    .flex_row()
     .gap(metrics.spacing)
     .items_center()
     .transition(Curve::Spring(motion::spring()))

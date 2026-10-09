@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crownui::prelude::Layer;
+use crownui::prelude::{Layer, Rect, Size};
 use serde::{Deserialize, Serialize};
 
 /// The stacking band the dock lives in.
@@ -107,8 +107,26 @@ impl Metrics {
 
     /// The glass around `tiles` icons; an empty dock keeps room for one, as a drop target.
     pub fn pill_width(&self, tiles: usize) -> f32 {
-        let tiles = tiles.max(1) as f32;
-        tiles * self.icon + (tiles - 1.0) * self.spacing + 2.0 * self.padding
+        self.row_width(tiles.max(1)) + 2.0 * self.padding
+    }
+
+    /// The row of `tiles` icons and the spaces between them.
+    pub fn row_width(&self, tiles: usize) -> f32 {
+        (tiles as f32 * self.step() - self.spacing).max(0.0)
+    }
+
+    /// How far above the screen edge the dock's foot is at `reveal`: its margin when up, its
+    /// whole height below the edge when hidden.
+    pub fn lift(&self, reveal: f32) -> f32 {
+        self.margin - (1.0 - reveal) * (self.margin + self.pill_height())
+    }
+
+    /// Where icon `index` of a row of `tiles` rests on a `surface` with the dock fully up: the
+    /// row is centred and its foot is the padding above the dock's.
+    pub fn resting_icon(&self, index: usize, tiles: usize, surface: Size) -> Rect {
+        let left = (surface.width - self.row_width(tiles)) / 2.0 + index as f32 * self.step();
+        let top = surface.height - self.lift(1.0) - self.padding - self.icon;
+        Rect::from_xywh(left, top, self.icon, self.icon)
     }
 
     /// Distance between neighbouring icon centres.
@@ -146,6 +164,19 @@ mod tests {
         assert_eq!(metrics.pill_width(0), metrics.pill_width(1));
         assert_eq!(metrics.pill_width(3), 3.0 * 52.0 + 2.0 * 10.0 + 2.0 * 10.0);
         assert_eq!(metrics.radius, metrics.pill_height() / 2.0);
+    }
+
+    #[test]
+    fn resting_icons_are_centred_with_their_foot_above_the_margin_and_padding() {
+        let metrics = Metrics::new(&DockSettings::default());
+        let surface = Size::new(1000.0, 90.0);
+        let row = 3.0 * 52.0 + 2.0 * 10.0;
+        let first = metrics.resting_icon(0, 3, surface);
+        let last = metrics.resting_icon(2, 3, surface);
+        assert_eq!(first.origin.x, (1000.0 - row) / 2.0);
+        assert_eq!(last.max_x(), (1000.0 + row) / 2.0);
+        assert_eq!(first.max_y(), 90.0 - 8.0 - 10.0);
+        assert_eq!(first.size, Size::new(52.0, 52.0));
     }
 
     fn parse(text: &str) -> DockSettings {

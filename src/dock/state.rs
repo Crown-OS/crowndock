@@ -22,6 +22,8 @@ pub struct Dock {
     pub drag: Signal<DragState>,
     pub slots: Signal<Vec<Slot>>,
     pub icons: Signal<HashMap<PathBuf, ImageId>>,
+    /// Each pinned item's app id, read once from its `.desktop` file.
+    pub app_ids: Store<HashMap<PathBuf, String>>,
     pub presence: Signal<Presence>,
     /// The layer surface's size.
     pub surface: Signal<Size>,
@@ -48,6 +50,7 @@ impl Dock {
             drag: cx.signal(DragState::default()),
             slots: cx.signal(Vec::new()),
             icons: cx.signal(HashMap::new()),
+            app_ids: cx.store(HashMap::new()),
             presence: cx.signal(Presence::default()),
             surface: cx.signal(Size::ZERO),
             scale: cx.scale_factor(),
