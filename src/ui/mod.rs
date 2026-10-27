@@ -247,54 +247,7 @@ fn draw_icon(
         );
     }
 
-    let inner_shadow = Gradient::new_two_point_radial(
-        Point::new(cx_f, cy_f - r * 0.15),
-        0.0,
-        Point::new(cx_f, cy_f),
-        radius,
-    )
-    .with_extend(Extend::Pad)
-    .with_stops(make_stops([
-        (0.0, [0.0, 0.0, 0.0, 0.0]),
-        (0.70, [0.0, 0.0, 0.0, 0.0]),
-        (1.0, [0.0, 0.0, 0.0, 0.22 * alpha]),
-    ]));
-    scene.fill(
-        Fill::NonZero,
-        Affine::IDENTITY,
-        &inner_shadow,
-        None,
-        &bounds,
-    );
-
-    let sheen = Gradient::new_linear(
-        Point::new(cx_f, cy_f - r),
-        Point::new(cx_f, cy_f - r * 0.30),
-    )
-    .with_extend(Extend::Pad)
-    .with_stops(make_stops([
-        (0.0, [1.0, 1.0, 1.0, 0.30 * alpha]),
-        (1.0, [1.0, 1.0, 1.0, 0.0]),
-    ]));
-    scene.fill(Fill::NonZero, Affine::IDENTITY, &sheen, None, &bounds);
-
     scene.pop_layer();
-
-    let rim = Gradient::new_linear(Point::new(cx_f, cy_f - r), Point::new(cx_f, cy_f + r))
-        .with_extend(Extend::Pad)
-        .with_stops(make_stops([
-            (0.0, [1.0, 1.0, 1.0, 0.50 * alpha]),
-            (0.5, [1.0, 1.0, 1.0, 0.10 * alpha]),
-            (1.0, [0.0, 0.0, 0.0, 0.22 * alpha]),
-        ]));
-    let stroke_width = (radius * 0.04).max(1.0) as f64;
-    scene.stroke(
-        &Stroke::new(stroke_width),
-        Affine::IDENTITY,
-        &rim,
-        None,
-        &circle,
-    );
 }
 
 fn draw_vanishing(scene: &mut Scene, v: &state::Vanishing) {
