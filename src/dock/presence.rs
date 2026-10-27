@@ -39,10 +39,13 @@ pub fn changed(cx: &mut Cx, dock: Dock) {
         return;
     }
     let delay = Duration::from_millis(if wanted { reveal_delay } else { hide_delay });
-    cx.spawn(tokio::time::sleep(delay), move |cx, ()| {
-        let current = dock.timer.with(cx, |latest| *latest == generation);
-        if current && dock.motion.update(cx, |motion| motion.reveal.aim(target)) {
-            motion::animate(cx, dock);
-        }
-    });
+    cx.spawn(
+        async move { tokio::time::sleep(delay).await },
+        move |cx, ()| {
+            let current = dock.timer.with(cx, |latest| *latest == generation);
+            if current && dock.motion.update(cx, |motion| motion.reveal.aim(target)) {
+                motion::animate(cx, dock);
+            }
+        },
+    );
 }
