@@ -14,11 +14,9 @@ use crownui::{
 
 use super::{slots, state::Dock};
 use crate::{
-    icon,
+    desktop_entry, icon,
     util::uri::{self, URI_LIST},
 };
-
-const DESKTOP_EXTENSION: &str = "desktop";
 
 /// Hands `path`'s icon to the compositor to carry, held at `grip`, and opens a gap where it was.
 pub fn lift(cx: &mut Cx, dock: Dock, path: &Path, grip: Point) {
@@ -73,8 +71,9 @@ pub fn over(cx: &mut Cx, dock: Dock, event: &mut DragOverEvent) {
     }
     event.accept(URI_LIST);
     let center = dock.surface.with(cx, |surface| surface.width / 2.0);
-    let shown = dock.shown_count(cx);
-    let gap = slots::gap_index(event.position.x, center, shown, &dock.metrics);
+    let pinned = dock.shown_count(cx);
+    let shown = pinned + dock.unpinned_count(cx);
+    let gap = slots::gap_index(event.position.x, center, shown, &dock.metrics).min(pinned);
     if dock.drag.with(cx, |drag| drag.gap != Some(gap)) {
         dock.update_drag(cx, |drag| drag.gap = Some(gap));
     }
@@ -91,7 +90,7 @@ pub fn drop(cx: &mut Cx, dock: Dock, event: &DropEvent) {
     let dropped: Vec<PathBuf> = uri::file_paths(&text)
         .filter(|path| {
             path.extension()
-                .is_some_and(|extension| extension == DESKTOP_EXTENSION)
+                .is_some_and(|extension| extension == desktop_entry::EXTENSION)
         })
         .collect();
     let shown = dock.shown_count(cx);

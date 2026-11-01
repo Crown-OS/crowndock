@@ -1,18 +1,14 @@
-//! The compositor opens each pinned app's windows out of its icon and minimizes them back into
-//! it, so it is told where every icon rests with the dock fully up. Clicks go through it too:
-//! it brings up the app's windows, or asks the dock to start an app that has none.
-
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+//! The compositor opens each app's windows out of its icon and minimizes them back into it, so
+//! it is told where every icon rests with the dock fully up, under every app id the icon stands
+//! for. Clicks go through it too: it brings up, minimizes or cycles the app's windows, or asks
+//! the dock to start an app that has none.
 
 use crownui::prelude::{Cx, Size, Styled, View, component, keyed, vstack};
 
-use super::{state::Dock, tile::PLACEHOLDER_CORNER};
-use crate::{desktop_entry, launcher};
+use super::{apps::AppKey, state::Dock, tile::PLACEHOLDER_CORNER};
+use crate::launcher;
 
-/// Reports the icons whenever the pinned items, their order or the surface's size change, and
+/// Reports the icons whenever the row's apps, their order or the surface's size change, and
 /// starts the apps the compositor asks for.
 pub fn reporter(dock: Dock) -> impl View {
     component(move |cx| {
@@ -20,14 +16,14 @@ pub fn reporter(dock: Dock) -> impl View {
         keyed(
             move |runtime| {
                 let surface = dock.surface.get(runtime);
-                let items = dock
-                    .settings
-                    .with(runtime, |settings| settings.items.clone());
-                (surface.width > 0.0).then_some((items, surface))
+                let icons: Vec<Vec<String>> = dock.apps.with(runtime, |apps| {
+                    apps.iter().map(|app| app.app_ids.clone()).collect()
+                });
+                (surface.width > 0.0).then_some((icons, surface))
             },
             move |cx, layout| {
-                if let Some((items, surface)) = layout {
-                    report(cx, dock, &items, surface);
+                if let Some((icons, surface)) = layout {
+                    report(cx, dock, &icons, surface);
                 }
                 vstack(()).display_none()
             },
@@ -35,52 +31,51 @@ pub fn reporter(dock: Dock) -> impl View {
     })
 }
 
-/// Opens the app `path` describes: through the compositor when it knows the icon, otherwise by
+/// Opens the app behind `key`: through the compositor when it knows the icon, otherwise by
 /// starting it.
-pub fn open(cx: &mut Cx, dock: Dock, path: &Path) {
-    let app_id = dock.app_ids.with(cx, |ids| ids.get(path).cloned());
+pub fn open(cx: &mut Cx, dock: Dock, key: &AppKey) {
+    let target = dock.apps.with(cx, |apps| {
+        apps.iter()
+            .find(|app| app.key == *key)
+            .map(|app| (app.app_ids.first().cloned(), app.entry.clone()))
+    });
+    let Some((app_id, entry)) = target else {
+        return;
+    };
     let activated = app_id.is_some_and(|app_id| cx.activate_app_icon(&app_id));
-    if !activated {
-        launcher::launch(path.to_owned());
+    if !activated && let Some(entry) = entry {
+        launcher::launch(entry);
     }
 }
 
-fn report(cx: &mut Cx, dock: Dock, items: &[PathBuf], surface: Size) {
-    let mut previous = dock.app_ids.update(cx, std::mem::take);
-    let ids: HashMap<PathBuf, String> = items
-        .iter()
-        .filter_map(|item| {
-            let app_id = previous
-                .remove(item)
-                .or_else(|| desktop_entry::app_id(item))?;
-            Some((item.clone(), app_id))
-        })
-        .collect();
-    for unpinned in previous.values() {
-        if !ids.values().any(|app_id| app_id == unpinned) {
-            cx.remove_app_icon(unpinned);
-        }
+/// `icons` holds the app ids of each icon, in row order.
+fn report(cx: &mut Cx, dock: Dock, icons: &[Vec<String>], surface: Size) {
+    let shown: Vec<String> = icons.iter().flatten().cloned().collect();
+    let previous = dock
+        .reported
+        .update(cx, |reported| std::mem::replace(reported, shown.clone()));
+    for gone in previous.iter().filter(|app_id| !shown.contains(app_id)) {
+        cx.remove_app_icon(gone);
     }
     let metrics = dock.metrics;
     let corner_radius = metrics.icon * PLACEHOLDER_CORNER;
-    for (index, item) in items.iter().enumerate() {
-        if let Some(app_id) = ids.get(item) {
-            let rect = metrics.resting_icon(index, items.len(), surface);
+    for (index, app_ids) in icons.iter().enumerate() {
+        let rect = metrics.resting_icon(index, icons.len(), surface);
+        for app_id in app_ids {
             cx.set_app_icon(app_id, rect, corner_radius);
         }
     }
-    dock.app_ids.update(cx, |current| *current = ids);
 }
 
 fn launch(cx: &mut Cx, dock: Dock, app_id: &str) {
-    let path = dock.app_ids.with(cx, |ids| {
-        ids.iter()
-            .find(|(_, id)| *id == app_id)
-            .map(|(path, _)| path.clone())
+    let entry = dock.apps.with(cx, |apps| {
+        apps.iter()
+            .find(|app| app.knows(app_id))
+            .and_then(|app| app.entry.clone())
     });
-    match path {
-        Some(path) => launcher::launch(path),
-        None => log::warn!("the compositor asked to start {app_id}, which is not pinned"),
+    match entry {
+        Some(entry) => launcher::launch(entry),
+        None => log::warn!("the compositor asked to start {app_id}, which the dock cannot start"),
     }
 }
 
@@ -88,49 +83,13 @@ fn launch(cx: &mut Cx, dock: Dock, app_id: &str) {
 mod tests {
     use crowntest::{TestApp, role};
     use crownui::{
-        ext::{AppIconRequest, ListenerKind},
-        prelude::{Listeners, Rect, Role, button, zstack},
+        ext::AppIconRequest,
+        prelude::{Capabilities, Rect, Role},
     };
 
-    use super::*;
-    use crate::{
-        dock::{probe, row},
-        settings::{DockSettings, Metrics},
+    use crate::dock::testing::{
+        SURFACE, UNPIN_FIRST, dock_row, laid_out_icons, pinned, start, windows,
     };
-
-    const SURFACE: Size = Size::new(1000.0, 90.0);
-    const UNPIN_FIRST: &str = "unpin first";
-
-    fn pinned(names: &[&str]) -> DockSettings {
-        DockSettings {
-            items: names
-                .iter()
-                .map(|name| PathBuf::from(format!("/nonexistent/{name}.desktop")))
-                .collect(),
-            autohide: false,
-            ..DockSettings::default()
-        }
-    }
-
-    fn dock_row(settings: DockSettings) -> impl View {
-        let metrics = Metrics::new(&settings);
-        component(move |cx| {
-            let dock = Dock::new(cx, settings.clone(), metrics);
-            dock.refresh(cx);
-            let unpin_first = button(UNPIN_FIRST).on_click(move |cx, _| {
-                dock.settings.update(cx, |settings| {
-                    settings.items.remove(0);
-                });
-                dock.refresh(cx);
-            });
-            zstack((
-                probe::size_probe(dock.surface).absolute().inset(0.0),
-                reporter(dock),
-                row(dock),
-                unpin_first.absolute(),
-            ))
-        })
-    }
 
     fn reported(app: &mut TestApp) -> Vec<(String, Rect)> {
         app.ui()
@@ -143,27 +102,9 @@ mod tests {
             .collect()
     }
 
-    fn laid_out_icons(app: &mut TestApp) -> Vec<Rect> {
-        let mut icons: Vec<Rect> = app
-            .ui()
-            .cx()
-            .tree()
-            .iter()
-            .filter(|(_, node)| node.listens_to(ListenerKind::DragStart))
-            .map(|(_, node)| node.geometry().window_rect)
-            .collect();
-        icons.sort_by(|a, b| a.origin.x.total_cmp(&b.origin.x));
-        icons
-    }
-
     #[test]
     fn each_pinned_app_is_reported_where_the_row_lays_its_icon_out() {
-        let mut app = TestApp::with_size(
-            dock_row(pinned(&["org.example.A", "org.example.B", "org.example.C"])),
-            SURFACE.width,
-            SURFACE.height,
-        );
-        app.settle();
+        let mut app = start(&["org.example.A", "org.example.B", "org.example.C"]);
         let reported = reported(&mut app);
         let ids: Vec<&str> = reported.iter().map(|(app_id, _)| app_id.as_str()).collect();
         assert_eq!(ids, ["org.example.A", "org.example.B", "org.example.C"]);
@@ -192,12 +133,7 @@ mod tests {
 
     #[test]
     fn an_unpinned_app_is_removed_and_the_rest_close_up() {
-        let mut app = TestApp::with_size(
-            dock_row(pinned(&["org.example.A", "org.example.B"])),
-            SURFACE.width,
-            SURFACE.height,
-        );
-        app.settle();
+        let mut app = start(&["org.example.A", "org.example.B"]);
         reported(&mut app);
         app.click(role(Role::Button).name(UNPIN_FIRST)).settle();
         let requests = app.ui().take_app_icon_requests();
@@ -210,5 +146,46 @@ mod tests {
             })
             .collect();
         assert_eq!(moved, laid_out_icons(&mut app));
+    }
+
+    #[test]
+    fn a_running_app_that_is_not_pinned_is_reported_after_the_pinned_ones_until_it_closes() {
+        let mut app = start(&["org.example.A"]);
+        reported(&mut app);
+        app.app_windows(windows("org.example.Unpinned", 1, false))
+            .settle();
+        let reported = reported(&mut app);
+        let unpinned: Vec<Rect> = reported
+            .iter()
+            .filter(|(app_id, _)| app_id == "org.example.Unpinned")
+            .map(|(_, rect)| *rect)
+            .collect();
+        assert_eq!(unpinned, laid_out_icons(&mut app)[1..]);
+        app.app_windows(windows("org.example.Unpinned", 0, false))
+            .settle();
+        let requests = app.ui().take_app_icon_requests();
+        assert_eq!(
+            requests[0],
+            AppIconRequest::Remove("org.example.Unpinned".into())
+        );
+    }
+
+    #[test]
+    fn a_click_on_a_running_app_hands_it_to_the_compositor() {
+        let mut app = start(&["org.example.A"]);
+        app.ui().set_platform_capabilities(Capabilities {
+            app_icons: true,
+            ..Capabilities::default()
+        });
+        app.app_windows(windows("org.example.Unpinned", 2, true))
+            .settle();
+        let center = laid_out_icons(&mut app)[1].center();
+        app.pointer_down(center.x, center.y)
+            .pointer_up(center.x, center.y);
+        let requests = app.ui().take_app_icon_requests();
+        assert_eq!(
+            requests.last(),
+            Some(&AppIconRequest::Activate("org.example.Unpinned".into()))
+        );
     }
 }

@@ -3,15 +3,20 @@
 //! input itself, so the surface's input region is only the strip and the dock.
 
 mod app_icons;
+mod apps;
 mod drag;
 mod glass;
 mod icons;
+mod indicator;
 mod motion;
 mod presence;
 mod probe;
+mod running;
 mod slots;
 mod state;
 mod sync;
+#[cfg(test)]
+mod testing;
 mod tile;
 
 use crownui::prelude::{
@@ -30,6 +35,7 @@ const HIDDEN: f32 = 0.001;
 pub fn root(settings: DockSettings, metrics: Metrics, tint: Tint) -> impl View {
     component(move |cx| {
         let dock = Dock::new(cx, settings.clone(), metrics);
+        running::track(cx, dock);
         let initial = settings.clone();
         // Watching starts a thread, which must wait until `crownui::run` has set up the GPU
         // driver through the process environment.
@@ -41,7 +47,7 @@ pub fn root(settings: DockSettings, metrics: Metrics, tint: Tint) -> impl View {
             app_icons::reporter(dock),
             trigger(dock),
             body(dock, tint),
-            row(dock),
+            row(dock, tint),
         ))
         .pointer_events_none()
         .on_pointer_enter(move |cx, _| dock.update_presence(cx, |presence| presence.pointer = true))
@@ -123,10 +129,10 @@ fn body(dock: Dock, tint: Tint) -> impl View {
 
 /// The icons. Moving, appearing and leaving animate on the render thread with the glass's
 /// spring; the UI thread only lays them out once per change.
-fn row(dock: Dock) -> impl View {
+fn row(dock: Dock, tint: Tint) -> impl View {
     let metrics = dock.metrics;
     let icons = for_each(dock.slots, Slot::key, move |cx, slot| {
-        tile::tile(cx, dock, slot)
+        tile::tile(cx, dock, slot, tint)
     })
     .flex_row()
     .gap(metrics.spacing)

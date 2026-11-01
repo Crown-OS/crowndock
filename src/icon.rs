@@ -1,7 +1,7 @@
 mod decode;
 mod lookup;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::desktop_entry::DesktopEntry;
 
@@ -18,7 +18,16 @@ pub fn load(desktop_file: &Path, edge: u32) -> Option<Pixels> {
         .ok()
         .and_then(|entry| entry.icon)
         .and_then(|name| lookup::find(&name, edge));
-    let file = named.or_else(|| lookup::find(lookup::FALLBACK, edge))?;
+    decode_or_fallback(named, edge)
+}
+
+/// The icon theme's icon called `name`, `edge` pixels square, or the generic executable icon.
+pub fn load_themed(name: &str, edge: u32) -> Option<Pixels> {
+    decode_or_fallback(lookup::find(name, edge), edge)
+}
+
+fn decode_or_fallback(found: Option<PathBuf>, edge: u32) -> Option<Pixels> {
+    let file = found.or_else(|| lookup::find(lookup::FALLBACK, edge))?;
     match decode::decode(&file, edge) {
         Ok(pixels) => Some(pixels),
         Err(error) => {

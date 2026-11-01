@@ -1,15 +1,20 @@
-//! What the row of icons shows: the pinned items, minus one being dragged away, plus a gap where
-//! a drag hovering over the dock would land.
+//! What the row of icons shows: the apps at rest, minus a pinned one being dragged away, plus a
+//! gap where a drag hovering over the dock would land.
 
 use std::path::{Path, PathBuf};
 
 use crownui::ext::ImageId;
 
+use super::{
+    apps::{AppKey, DockApp},
+    icons::IconSource,
+    indicator::Indicator,
+};
 use crate::settings::Metrics;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SlotKey {
-    Item(PathBuf),
+    Item(AppKey),
     Gap,
 }
 
@@ -17,11 +22,23 @@ pub enum SlotKey {
 pub struct Slot {
     pub key: SlotKey,
     pub image: Option<ImageId>,
+    pub indicator: Indicator,
+    /// Whether the compositor draws the icon instead of the dock.
+    pub carried: bool,
 }
 
 impl Slot {
     pub fn key(slot: &Slot) -> SlotKey {
         slot.key.clone()
+    }
+
+    fn gap() -> Self {
+        Self {
+            key: SlotKey::Gap,
+            image: None,
+            indicator: Indicator::Closed,
+            carried: false,
+        }
     }
 }
 
@@ -41,29 +58,29 @@ impl DragState {
             .iter()
             .filter(move |item| self.lifted.as_ref() != Some(*item))
     }
+
+    fn lifts(&self, key: &AppKey) -> bool {
+        matches!(key, AppKey::Pinned(item) if self.lifted.as_ref() == Some(item))
+    }
 }
 
 pub fn arrange(
-    items: &[PathBuf],
+    apps: &[DockApp],
     drag: &DragState,
-    image: impl Fn(&Path) -> Option<ImageId>,
+    image: impl Fn(&IconSource) -> Option<ImageId>,
 ) -> Vec<Slot> {
-    let mut slots: Vec<Slot> = drag
-        .shown(items)
-        .map(|item| Slot {
-            key: SlotKey::Item(item.clone()),
-            image: image(item),
+    let mut slots: Vec<Slot> = apps
+        .iter()
+        .filter(|app| !drag.lifts(&app.key))
+        .map(|app| Slot {
+            key: SlotKey::Item(app.key.clone()),
+            image: image(&app.icon),
+            indicator: Indicator::new(app.windows, app.focused),
+            carried: app.carried,
         })
         .collect();
     if let Some(gap) = drag.gap {
-        let at = gap.min(slots.len());
-        slots.insert(
-            at,
-            Slot {
-                key: SlotKey::Gap,
-                image: None,
-            },
-        );
+        slots.insert(gap.min(slots.len()), Slot::gap());
     }
     slots
 }
@@ -100,25 +117,25 @@ mod tests {
         names.iter().map(PathBuf::from).collect()
     }
 
+    fn pinned(name: &str) -> SlotKey {
+        SlotKey::Item(AppKey::Pinned(name.into()))
+    }
+
     #[test]
     fn a_lifted_item_leaves_a_gap_where_it_was() {
-        let items = paths(&["a", "b", "c"]);
+        let apps: Vec<DockApp> = paths(&["a", "b", "c"])
+            .into_iter()
+            .map(DockApp::pinned)
+            .collect();
         let drag = DragState {
             lifted: Some("b".into()),
             gap: Some(1),
         };
-        let keys: Vec<SlotKey> = arrange(&items, &drag, |_| None)
+        let keys: Vec<SlotKey> = arrange(&apps, &drag, |_| None)
             .iter()
             .map(Slot::key)
             .collect();
-        assert_eq!(
-            keys,
-            [
-                SlotKey::Item("a".into()),
-                SlotKey::Gap,
-                SlotKey::Item("c".into())
-            ]
-        );
+        assert_eq!(keys, [pinned("a"), SlotKey::Gap, pinned("c")]);
     }
 
     #[test]

@@ -21,7 +21,7 @@ const FALLBACK_WIDTH: u32 = 1280;
 pub fn app() -> Result<()> {
     let settings: DockSettings = crownconfig::load_section(DockSettings::SECTION);
     let metrics = Metrics::new(&settings);
-    let tint = Tint::new(crownconfig::load_appearance().dark_mode);
+    let tint = Tint::new(&crownconfig::load_appearance());
     let height = metrics.surface_height();
     let reserved = if settings.autohide {
         0

@@ -1,6 +1,6 @@
-//! The pinned items' icons on the GPU, decoded off the UI thread at exactly the size they are
-//! shown. The decoded pixels are handed to the renderer and not kept; an unpinned item's
-//! icon is freed.
+//! The row's icons on the GPU, decoded off the UI thread at exactly the size they are shown.
+//! The decoded pixels are handed to the renderer and not kept; an icon the row no longer shows
+//! is freed.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -10,13 +10,33 @@ use std::{
 use crownui::prelude::Cx;
 
 use super::state::Dock;
-use crate::icon;
+use crate::icon::{self, Pixels};
 
-/// Icons being decoded, and the pixel edge they are decoded at.
+/// Where an icon's pixels come from.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum IconSource {
+    /// The icon a `.desktop` file names.
+    Entry(PathBuf),
+    /// The icon theme's icon of this name, for an app no `.desktop` file describes.
+    Themed(String),
+}
+
+impl IconSource {
+    fn load(&self, edge: u32) -> Option<Pixels> {
+        match self {
+            Self::Entry(desktop_file) => icon::load(desktop_file, edge),
+            Self::Themed(name) => icon::load_themed(name, edge),
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct IconLoads {
+    /// The pixel edge icons are decoded at.
     edge: u32,
-    pending: HashSet<PathBuf>,
+    /// Icons decoded, being decoded or that failed to decode at this edge, so none is decoded
+    /// twice.
+    attempted: HashSet<IconSource>,
 }
 
 /// Starts over at `scale`: every icon is freed and decoded again at the new size.
@@ -31,69 +51,65 @@ pub fn reload(cx: &mut Cx, dock: Dock, scale: f32) {
     }
     dock.loads.update(cx, |loads| {
         loads.edge = edge;
-        loads.pending.clear();
+        loads.attempted.clear();
     });
-    sync(cx, dock);
     dock.refresh(cx);
 }
 
-/// Frees the icons of items no longer pinned and starts decoding those not loaded yet.
+/// Frees the icons the row no longer shows and starts decoding those not loaded yet.
 pub fn sync(cx: &mut Cx, dock: Dock) {
-    let items = dock.settings.with(cx, |settings| settings.items.clone());
-    let mut unpinned = Vec::new();
+    let wanted: HashSet<IconSource> = dock
+        .apps
+        .with(cx, |apps| apps.iter().map(|app| app.icon.clone()).collect());
+    let mut unwanted = Vec::new();
     dock.icons.update(cx, |icons| {
-        icons.retain(|path, image| {
-            let pinned = items.contains(path);
-            if !pinned {
-                unpinned.push(*image);
+        icons.retain(|source, image| {
+            let shown = wanted.contains(source);
+            if !shown {
+                unwanted.push(*image);
             }
-            pinned
+            shown
         });
     });
-    for image in unpinned {
+    for image in unwanted {
         cx.release_image(image);
     }
-    let edge = dock.loads.with(cx, |loads| loads.edge);
+    let edge = dock.loads.update(cx, |loads| {
+        loads.attempted.retain(|source| wanted.contains(source));
+        loads.edge
+    });
     if edge == 0 {
         return;
     }
-    let missing: Vec<PathBuf> = dock.icons.with(cx, |icons| {
-        items
+    let missing: Vec<IconSource> = dock.loads.update(cx, |loads| {
+        wanted
             .into_iter()
-            .filter(|path| !icons.contains_key(path))
+            .filter(|source| loads.attempted.insert(source.clone()))
             .collect()
     });
-    for path in missing {
-        if dock
-            .loads
-            .update(cx, |loads| loads.pending.insert(path.clone()))
-        {
-            load(cx, dock, path, edge);
-        }
+    for source in missing {
+        load(cx, dock, source, edge);
     }
 }
 
-fn load(cx: &mut Cx, dock: Dock, path: PathBuf, edge: u32) {
-    let source = path.clone();
+fn load(cx: &mut Cx, dock: Dock, source: IconSource, edge: u32) {
+    let decoded = source.clone();
     let decode = async move {
-        tokio::task::spawn_blocking(move || icon::load(&source, edge))
+        tokio::task::spawn_blocking(move || decoded.load(edge))
             .await
             .ok()
             .flatten()
     };
     cx.spawn(decode, move |cx, pixels| {
-        let current = dock.loads.update(cx, |loads| {
-            loads.edge == edge && loads.pending.remove(&path)
+        let current = dock.loads.with(cx, |loads| {
+            loads.edge == edge && loads.attempted.contains(&source)
         });
-        let pinned = dock
-            .settings
-            .with(cx, |settings| settings.items.contains(&path));
-        let (Some(pixels), true, true) = (pixels, current, pinned) else {
+        let (Some(pixels), true) = (pixels, current) else {
             return;
         };
         let image = cx.register_image(pixels.edge, pixels.edge, pixels.rgba);
         dock.icons.update(cx, |icons| {
-            icons.insert(path, image);
+            icons.insert(source, image);
         });
         dock.refresh(cx);
     });

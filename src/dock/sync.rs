@@ -3,7 +3,7 @@
 use crownconfig::SectionWatch;
 use crownui::prelude::Cx;
 
-use super::{icons, presence, state::Dock};
+use super::{presence, state::Dock};
 use crate::settings::{DockSettings, Metrics};
 
 pub fn follow(cx: &mut Cx, dock: Dock, initial: DockSettings) {
@@ -35,7 +35,6 @@ fn apply(cx: &mut Cx, dock: Dock, settings: DockSettings) {
         log::info!("dock.ron reshapes the dock; restart crowndock to apply it fully");
     }
     dock.settings.set(cx, settings);
-    icons::sync(cx, dock);
     dock.refresh(cx);
     presence::changed(cx, dock);
 }

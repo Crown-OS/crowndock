@@ -1,7 +1,12 @@
 //! The dock's body is the compositor's frosted glass: blur, tint, rim and shadow are all drawn
-//! by the compositor behind the surface, so the dock paints nothing but its icons.
+//! by the compositor behind the surface, so the dock paints nothing but its icons and their
+//! window marks.
 
-use crownui::prelude::{Color, Material, MaterialBlur, MaterialShadow, Vector};
+use crownconfig::Appearance;
+use crownui::{
+    kit::accent_stops,
+    prelude::{Color, Material, MaterialBlur, MaterialShadow, Vector},
+};
 
 const BLUR_RADIUS: f32 = 40.0;
 const VIBRANCY: f32 = 1.6;
@@ -13,24 +18,48 @@ const SHADOW_ALPHA: f32 = 0.30;
 /// unreadable, so it is nearly solid instead.
 const SOLID_ALPHA: f32 = 0.88;
 
-/// The colour laid over the blur, for the desktop's light or dark appearance.
+/// The colours the dock paints with, for the desktop's light or dark appearance and accent.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Tint(Color);
+pub struct Tint {
+    /// Laid over the blur.
+    glass: Color,
+    /// The window marks of an app that is not focused.
+    mark: Color,
+    /// The mark of the focused app.
+    accent: Color,
+}
 
 impl Tint {
-    pub fn new(dark: bool) -> Self {
-        Self(if dark {
-            Color::new(0.07, 0.08, 0.10, 0.32)
+    pub fn new(appearance: &Appearance) -> Self {
+        let accent = accent_stops(appearance.accent);
+        if appearance.dark_mode {
+            Self {
+                glass: Color::new(0.07, 0.08, 0.10, 0.32),
+                mark: Color::new(1.0, 1.0, 1.0, 0.55),
+                accent: accent.start,
+            }
         } else {
-            Color::new(1.0, 1.0, 1.0, 0.38)
-        })
+            Self {
+                glass: Color::new(1.0, 1.0, 1.0, 0.38),
+                mark: Color::new(0.0, 0.0, 0.0, 0.42),
+                accent: accent.end,
+            }
+        }
     }
 
     pub fn solid(self) -> Color {
         Color {
             a: SOLID_ALPHA,
-            ..self.0
+            ..self.glass
         }
+    }
+
+    pub fn mark(self) -> Color {
+        self.mark
+    }
+
+    pub fn accent(self) -> Color {
+        self.accent
     }
 }
 
@@ -44,8 +73,8 @@ pub fn material(reveal: f32, radius: f32, tint: Tint) -> Material {
         blur: Some(MaterialBlur {
             radius: BLUR_RADIUS * strength,
             tint: Color {
-                a: tint.0.a * strength,
-                ..tint.0
+                a: tint.glass.a * strength,
+                ..tint.glass
             },
             saturation: 1.0 + (VIBRANCY - 1.0) * strength,
         }),

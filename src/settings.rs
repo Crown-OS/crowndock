@@ -129,6 +129,12 @@ impl Metrics {
         Rect::from_xywh(left, top, self.icon, self.icon)
     }
 
+    /// How far below an icon's top a window mark `height` tall sits: centred in the padding
+    /// under the icon, so it stays on the glass.
+    pub fn mark_top(&self, height: f32) -> f32 {
+        self.icon + ((self.padding - height) / 2.0).max(0.0)
+    }
+
     /// Distance between neighbouring icon centres.
     pub fn step(&self) -> f32 {
         self.icon + self.spacing
@@ -177,6 +183,17 @@ mod tests {
         assert_eq!(last.max_x(), (1000.0 + row) / 2.0);
         assert_eq!(first.max_y(), 90.0 - 8.0 - 10.0);
         assert_eq!(first.size, Size::new(52.0, 52.0));
+    }
+
+    #[test]
+    fn a_window_mark_sits_on_the_glass_below_its_icon() {
+        let metrics = Metrics::new(&DockSettings::default());
+        let surface = Size::new(1000.0, metrics.surface_height() as f32);
+        let icon = metrics.resting_icon(0, 1, surface);
+        let mark_top = icon.origin.y + metrics.mark_top(3.0);
+        let glass_bottom = surface.height - metrics.lift(1.0);
+        assert!(mark_top > icon.max_y());
+        assert!(mark_top + 3.0 < glass_bottom);
     }
 
     fn parse(text: &str) -> DockSettings {

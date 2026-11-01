@@ -1,7 +1,13 @@
+mod search;
+
 use std::path::Path;
 
 use anyhow::{Context, Result};
 
+pub use search::find;
+
+/// The extension of `.desktop` files.
+pub const EXTENSION: &str = "desktop";
 const SECTION: &str = "Desktop Entry";
 /// `Exec=` field codes that stand alone and expand to files, URLs or launcher data the dock
 /// never passes.
