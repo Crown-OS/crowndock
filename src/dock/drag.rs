@@ -34,6 +34,7 @@ pub fn lift(cx: &mut Cx, dock: Dock, path: &Path, grip: Point) {
     let source = DragSource {
         items: vec![(URI_LIST.to_owned(), uri::uri_list(path))],
         icon,
+        ..DragSource::default()
     };
     if !cx.start_drag(source, move |cx, outcome| land(cx, dock, outcome)) {
         return;
