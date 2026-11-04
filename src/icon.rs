@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::desktop_entry::DesktopEntry;
 
 /// A square icon in straight-alpha RGBA8.
+#[derive(Clone)]
 pub struct Pixels {
     pub edge: u32,
     pub rgba: Vec<u8>,

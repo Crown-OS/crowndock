@@ -12,7 +12,7 @@ use crownui::{
     prelude::{Cx, DragIcon, DragOutcome, DragSource, Point},
 };
 
-use super::{slots, state::Dock};
+use super::{icons, slots, state::Dock};
 use crate::{
     desktop_entry, icon,
     util::uri::{self, URI_LIST},
@@ -23,7 +23,8 @@ pub fn lift(cx: &mut Cx, dock: Dock, path: &Path, grip: Point) {
     let size = dock.metrics.icon;
     let scale = cx.scale_factor().with(cx, |scale| *scale);
     let edge = (size * scale).round().max(1.0) as u32;
-    let icon = icon::load(path, edge).map(|pixels| DragIcon {
+    let pixels = icons::draggable(cx, dock, path).or_else(|| icon::load(path, edge));
+    let icon = pixels.map(|pixels| DragIcon {
         width: pixels.edge,
         height: pixels.edge,
         rgba: pixels.rgba,

@@ -1,10 +1,10 @@
 //! The row's icons on the GPU, decoded off the UI thread at exactly the size they are shown.
-//! The decoded pixels are handed to the renderer and not kept; an icon the row no longer shows
-//! is freed.
+//! The pixels of `.desktop` icons are also kept, so dragging one hands the compositor its icon
+//! without decoding it again on the UI thread; an icon the row no longer shows is freed.
 
 use std::{
     collections::{HashMap, HashSet},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use crownui::prelude::Cx;
@@ -37,6 +37,16 @@ pub struct IconLoads {
     /// Icons decoded, being decoded or that failed to decode at this edge, so none is decoded
     /// twice.
     attempted: HashSet<IconSource>,
+    /// The decoded pixels of the `.desktop` files' icons, for drags.
+    draggable: HashMap<IconSource, Pixels>,
+}
+
+/// The pixels of the icon `desktop_file` names, as the row shows it.
+pub fn draggable(cx: &mut Cx, dock: Dock, desktop_file: &Path) -> Option<Pixels> {
+    dock.loads.with(cx, |loads| {
+        let source = IconSource::Entry(desktop_file.to_owned());
+        loads.draggable.get(&source).cloned()
+    })
 }
 
 /// Starts over at `scale`: every icon is freed and decoded again at the new size.
@@ -52,6 +62,7 @@ pub fn reload(cx: &mut Cx, dock: Dock, scale: f32) {
     dock.loads.update(cx, |loads| {
         loads.edge = edge;
         loads.attempted.clear();
+        loads.draggable.clear();
     });
     dock.refresh(cx);
 }
@@ -76,6 +87,7 @@ pub fn sync(cx: &mut Cx, dock: Dock) {
     }
     let edge = dock.loads.update(cx, |loads| {
         loads.attempted.retain(|source| wanted.contains(source));
+        loads.draggable.retain(|source, _| wanted.contains(source));
         loads.edge
     });
     if edge == 0 {
@@ -87,30 +99,48 @@ pub fn sync(cx: &mut Cx, dock: Dock) {
             .filter(|source| loads.attempted.insert(source.clone()))
             .collect()
     });
-    for source in missing {
-        load(cx, dock, source, edge);
+    if !missing.is_empty() {
+        load(cx, dock, missing, edge);
     }
 }
 
-fn load(cx: &mut Cx, dock: Dock, source: IconSource, edge: u32) {
-    let decoded = source.clone();
+/// Decodes `sources` one after another on a single blocking thread, so a dock full of icons
+/// does not spread its decoding buffers over as many threads and allocator arenas, and shows
+/// them all in one refresh.
+fn load(cx: &mut Cx, dock: Dock, sources: Vec<IconSource>, edge: u32) {
     let decode = async move {
-        tokio::task::spawn_blocking(move || decoded.load(edge))
-            .await
-            .ok()
-            .flatten()
+        tokio::task::spawn_blocking(move || {
+            sources
+                .into_iter()
+                .filter_map(|source| source.load(edge).map(|pixels| (source, pixels)))
+                .collect::<Vec<_>>()
+        })
+        .await
+        .unwrap_or_default()
     };
-    cx.spawn(decode, move |cx, pixels| {
-        let current = dock.loads.with(cx, |loads| {
-            loads.edge == edge && loads.attempted.contains(&source)
-        });
-        let (Some(pixels), true) = (pixels, current) else {
-            return;
-        };
-        let image = cx.register_image(pixels.edge, pixels.edge, pixels.rgba);
-        dock.icons.update(cx, |icons| {
-            icons.insert(source, image);
-        });
+    cx.spawn(decode, move |cx, decoded| {
+        for (source, pixels) in decoded {
+            show(cx, dock, source, pixels, edge);
+        }
         dock.refresh(cx);
+    });
+}
+
+fn show(cx: &mut Cx, dock: Dock, source: IconSource, pixels: Pixels, edge: u32) {
+    let current = dock.loads.with(cx, |loads| {
+        loads.edge == edge && loads.attempted.contains(&source)
+    });
+    if !current {
+        return;
+    }
+    if matches!(source, IconSource::Entry(_)) {
+        let kept = (source.clone(), pixels.clone());
+        dock.loads.update(cx, |loads| {
+            loads.draggable.insert(kept.0, kept.1);
+        });
+    }
+    let image = cx.register_image(pixels.edge, pixels.edge, pixels.rgba);
+    dock.icons.update(cx, |icons| {
+        icons.insert(source, image);
     });
 }
