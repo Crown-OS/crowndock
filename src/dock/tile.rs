@@ -17,8 +17,6 @@ use super::{
 };
 
 const PRESSED_SCALE: f32 = 0.9;
-/// An icon's corner radius as a share of its edge.
-pub const PLACEHOLDER_CORNER: f32 = 0.22;
 /// A landed icon shows again at once: the compositor draws its copy until then, so a fade would
 /// show both.
 const LANDING_MS: u64 = 0;
@@ -41,7 +39,7 @@ fn app(cx: &mut Cx, dock: Dock, slot: Signal<Slot>, key: AppKey, tint: Tint) -> 
     let clicked = key.clone();
     let icon = keyed(
         move |runtime| slot.with(runtime, |slot| slot.image),
-        move |_, image| art(image, metrics.icon),
+        move |_, image| art(image, metrics.icon, metrics.icon_radius()),
     )
     .size(metrics.icon)
     .origin(0.5, 1.0)
@@ -68,14 +66,14 @@ fn app(cx: &mut Cx, dock: Dock, slot: Signal<Slot>, key: AppKey, tint: Tint) -> 
         .exit(|style| style.scale(0.0).opacity(0.0))
 }
 
-fn art(image: Option<ImageId>, size: f32) -> AnyView {
+fn art(image: Option<ImageId>, size: f32, radius: f32) -> AnyView {
     match image {
         Some(image) => cover_image(image, Size::new(size, size), 0.0)
             .size(size)
             .boxed(),
         None => vstack(())
             .size(size)
-            .rounded(size * PLACEHOLDER_CORNER)
+            .rounded(radius)
             .bg(rgba(0xFF_FF_FF_2E))
             .boxed(),
     }

@@ -5,7 +5,7 @@
 
 use crownui::prelude::{Cx, Size, Styled, View, component, keyed, vstack};
 
-use super::{apps::AppKey, state::Dock, tile::PLACEHOLDER_CORNER};
+use super::{apps::AppKey, state::Dock};
 use crate::launcher;
 
 /// Reports the icons whenever the row's apps, their order or the surface's size change, and
@@ -58,7 +58,7 @@ fn report(cx: &mut Cx, dock: Dock, icons: &[Vec<String>], surface: Size) {
         cx.remove_app_icon(gone);
     }
     let metrics = dock.metrics;
-    let corner_radius = metrics.icon * PLACEHOLDER_CORNER;
+    let corner_radius = metrics.icon_radius();
     for (index, app_ids) in icons.iter().enumerate() {
         let rect = metrics.resting_icon(index, icons.len(), surface);
         for app_id in app_ids {

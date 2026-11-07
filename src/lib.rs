@@ -8,7 +8,7 @@ mod util;
 use anyhow::{Context, Result};
 use crownui::{
     AppConfig,
-    prelude::{Anchor, KeyboardInteractivity, LayerExtent, LayerOptions, TRANSPARENT},
+    prelude::{Anchor, CornerShape, KeyboardInteractivity, LayerExtent, LayerOptions, TRANSPARENT},
 };
 
 use dock::Tint;
@@ -38,6 +38,7 @@ pub fn app() -> Result<()> {
         .size(FALLBACK_WIDTH, height)
         .clear_color(TRANSPARENT)
         .accessibility(false)
+        .corner_shape(CornerShape::Squircle)
         .layer(layer);
     crownui::run(dock::root(settings, metrics, tint), config).context("the dock stopped")
 }

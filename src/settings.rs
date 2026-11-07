@@ -37,7 +37,8 @@ pub struct DockSettings {
     pub padding: u16,
     /// Space between the dock and the screen edge.
     pub margin: u16,
-    /// Corner radius; `None` rounds the ends fully.
+    /// Corner radius; `None` follows the icons' corners, so the dock's squircle is concentric
+    /// with theirs.
     pub radius: Option<u16>,
     pub layer: DockLayer,
     /// Slide away until the pointer touches the bottom edge.
@@ -81,6 +82,9 @@ pub struct Metrics {
     pub hover_scale: f32,
 }
 
+/// An icon's corner radius as a share of its edge.
+const ICON_CORNER: f32 = 0.22;
+
 /// Strip along the screen edge that reveals a hidden dock.
 pub const TRIGGER_HEIGHT: f32 = 2.0;
 
@@ -89,6 +93,7 @@ impl Metrics {
         let icon = f32::from(settings.icon_size.max(16));
         let padding = f32::from(settings.padding);
         let height = icon + 2.0 * padding;
+        let concentric = icon * ICON_CORNER + padding;
         Self {
             icon,
             spacing: f32::from(settings.spacing),
@@ -96,9 +101,14 @@ impl Metrics {
             margin: f32::from(settings.margin),
             radius: settings
                 .radius
-                .map_or(height / 2.0, |radius| f32::from(radius).min(height / 2.0)),
+                .map_or(concentric, f32::from)
+                .min(height / 2.0),
             hover_scale: settings.hover_scale.clamp(1.0, 2.0),
         }
+    }
+
+    pub fn icon_radius(&self) -> f32 {
+        self.icon * ICON_CORNER
     }
 
     pub fn pill_height(&self) -> f32 {
@@ -169,7 +179,21 @@ mod tests {
         let metrics = Metrics::new(&DockSettings::default());
         assert_eq!(metrics.pill_width(0), metrics.pill_width(1));
         assert_eq!(metrics.pill_width(3), 3.0 * 52.0 + 2.0 * 10.0 + 2.0 * 10.0);
-        assert_eq!(metrics.radius, metrics.pill_height() / 2.0);
+    }
+
+    #[test]
+    fn the_corners_are_concentric_with_the_icons_unless_set() {
+        let concentric = Metrics::new(&DockSettings::default());
+        assert_eq!(
+            concentric.radius,
+            concentric.icon_radius() + concentric.padding
+        );
+        assert!(concentric.radius < concentric.pill_height() / 2.0);
+        let pill = Metrics::new(&DockSettings {
+            radius: Some(u16::MAX),
+            ..DockSettings::default()
+        });
+        assert_eq!(pill.radius, pill.pill_height() / 2.0);
     }
 
     #[test]
