@@ -6,6 +6,8 @@ use anyhow::{Context, Result};
 
 pub use search::find;
 
+use crate::util::non_default_gpu::GpuPreference;
+
 /// The extension of `.desktop` files.
 pub const EXTENSION: &str = "desktop";
 const SECTION: &str = "Desktop Entry";
@@ -16,6 +18,7 @@ const FIELD_CODES: [&str; 7] = ["%f", "%F", "%u", "%U", "%i", "%c", "%k"];
 /// The parts of a `.desktop` file the dock uses.
 pub struct DesktopEntry {
     pub icon: Option<String>,
+    pub gpu: GpuPreference,
     exec: Option<String>,
     startup_wm_class: Option<String>,
 }
@@ -29,6 +32,7 @@ impl DesktopEntry {
             icon: section.attr("Icon").map(str::to_owned),
             exec: section.attr("Exec").map(str::to_owned),
             startup_wm_class: section.attr("StartupWMClass").map(str::to_owned),
+            gpu: GpuPreference::from_desktop_entry(section.attr(GpuPreference::DESKTOP_ENTRY_KEY)),
         })
     }
 
@@ -92,6 +96,7 @@ mod tests {
             icon: None,
             exec: Some(exec.to_owned()),
             startup_wm_class: None,
+            gpu: GpuPreference::Default,
         }
         .command()
     }
@@ -132,6 +137,31 @@ mod tests {
         let _ = std::fs::remove_dir_all(&directory);
         assert_eq!(ids.0.as_deref(), Some("classed-window"));
         assert_eq!(ids.1.as_deref(), Some("org.gnome.Nautilus"));
+    }
+
+    #[test]
+    fn a_game_that_prefers_the_non_default_gpu_says_so() {
+        let directory = std::env::temp_dir().join(format!("crowndock-gpu-{}", std::process::id()));
+        let game = directory.join("game.desktop");
+        let plain = directory.join("plain.desktop");
+        let written = std::fs::create_dir_all(&directory)
+            .and_then(|()| {
+                std::fs::write(
+                    &game,
+                    "[Desktop Entry]\nName=Game\nExec=game\nPrefersNonDefaultGPU=true\n",
+                )
+            })
+            .and_then(|()| std::fs::write(&plain, "[Desktop Entry]\nName=Plain\nExec=plain\n"));
+        if let Err(error) = written {
+            panic!("write the test entries: {error}");
+        }
+        let gpus = (
+            DesktopEntry::read(&game).map(|entry| entry.gpu).ok(),
+            DesktopEntry::read(&plain).map(|entry| entry.gpu).ok(),
+        );
+        let _ = std::fs::remove_dir_all(&directory);
+        assert_eq!(gpus.0, Some(GpuPreference::NonDefault));
+        assert_eq!(gpus.1, Some(GpuPreference::Default));
     }
 
     #[test]

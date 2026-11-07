@@ -12,14 +12,16 @@ pub fn launch(desktop_file: PathBuf) {
     let launcher = std::thread::Builder::new()
         .name("crowndock-launch".into())
         .spawn(move || {
-            let command = DesktopEntry::read(&desktop_file).map(|entry| entry.command());
-            let Ok(Some(argv)) = command else {
+            let command = DesktopEntry::read(&desktop_file)
+                .map(|entry| entry.command().map(|argv| (argv, entry.gpu)));
+            let Ok(Some((argv, gpu))) = command else {
                 log::warn!("{} has nothing to run", desktop_file.display());
                 return;
             };
             let started = Command::new("setsid")
                 .arg("--fork")
                 .args(&argv)
+                .envs(gpu.environment().iter().map(|(key, value)| (key, value)))
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
