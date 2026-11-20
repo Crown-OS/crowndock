@@ -37,7 +37,7 @@ pub fn root(settings: DockSettings, metrics: Metrics, tint: Tint) -> impl View {
         let dock = Dock::new(cx, settings.clone(), metrics);
         running::track(cx, dock);
         let initial = settings.clone();
-        // Watching starts a thread, which must wait until `crownui::run` has set up the GPU
+        // Watching starts a thread, which must wait until crownui has set up the GPU
         // driver through the process environment.
         cx.request_animation_frame(move |cx, _| sync::follow(cx, dock, initial));
         dock.refresh(cx);
