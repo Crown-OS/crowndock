@@ -1,4 +1,4 @@
-//! The marks under a running app's icon, as on the Windows 11 taskbar: a muted dot per window,
+//! The marks under a running app's icon: a muted dot per window,
 //! up to a few, or one longer accent pill while the app is focused. Marks spring in and out
 //! with the rest of the dock.
 

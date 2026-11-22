@@ -30,14 +30,21 @@ impl Surfaces for DockSurfaces {
 
     fn build(&mut self, _output: &Output) -> Vec<(AnyView, AppConfig)> {
         let settings: DockSettings = crownconfig::load_section(DockSettings::SECTION);
-        let metrics = Metrics::new(&settings);
-        let tint = Tint::new(&crownconfig::load_appearance());
-        let config = surface_config(&settings, metrics);
-        vec![(dock::root(settings, metrics, tint).boxed(), config)]
+        let config = app_config(&settings);
+        vec![(root(settings).boxed(), config)]
     }
 }
 
-fn surface_config(settings: &DockSettings, metrics: Metrics) -> AppConfig {
+/// The dock for `settings`, tinted for the configured appearance.
+pub fn root(settings: DockSettings) -> impl View {
+    let metrics = Metrics::new(&settings);
+    let tint = Tint::new(&crownconfig::load_appearance());
+    dock::root(settings, metrics, tint)
+}
+
+/// The layer surface along the bottom edge that holds the dock for `settings`.
+pub fn app_config(settings: &DockSettings) -> AppConfig {
+    let metrics = Metrics::new(settings);
     let height = metrics.surface_height();
     let reserved = if settings.autohide {
         0

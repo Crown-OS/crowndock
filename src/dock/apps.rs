@@ -131,6 +131,7 @@ pub fn rest(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dock::running::IconCopy;
 
     fn report(running: &mut Running, app_id: &str, count: u32, entry: Option<&str>) {
         let update = AppWindows {
@@ -190,7 +191,7 @@ mod tests {
     fn an_icon_is_carried_when_any_of_its_app_ids_is() {
         let mut running = Running::default();
         report(&mut running, "z", 1, None);
-        running.carry("Z", true);
+        running.carry("Z", Some(IconCopy::Drawn));
         let row = rest(&[], &HashMap::new(), &running);
         assert!(row[0].carried);
     }

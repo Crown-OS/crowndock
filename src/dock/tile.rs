@@ -81,7 +81,12 @@ fn art(image: Option<ImageId>, size: f32, radius: f32) -> AnyView {
 
 #[cfg(test)]
 mod tests {
-    use crate::dock::testing::{hidden_icons, laid_out_icons, start, windows};
+    use crowntest::TestApp;
+
+    use crate::{
+        dock::testing::{SURFACE, dock_row, hidden_icons, laid_out_icons, pinned, start, windows},
+        settings::DockSettings,
+    };
 
     #[test]
     fn a_carried_icon_keeps_its_place_undrawn_until_it_lands() {
@@ -102,5 +107,18 @@ mod tests {
             .settle();
         app.lift_app_icon("org.example.Unpinned");
         assert_eq!(hidden_icons(&mut app), 1);
+    }
+
+    #[test]
+    fn an_icon_lifted_off_a_hidden_dock_stays_drawn_for_the_window_to_land_on() {
+        let settings = DockSettings {
+            autohide: true,
+            ..pinned(&["org.example.A"])
+        };
+        let mut app = TestApp::with_size(dock_row(settings), SURFACE.width, SURFACE.height);
+        app.settle();
+        app.app_windows(windows("org.example.A", 1, false)).settle();
+        app.lift_app_icon("org.example.A").settle();
+        assert_eq!(hidden_icons(&mut app), 0);
     }
 }

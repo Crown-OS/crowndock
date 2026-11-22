@@ -9,6 +9,7 @@ mod util;
 use anyhow::{Context, Result};
 
 use surfaces::DockSurfaces;
+pub use surfaces::{app_config, root};
 
 pub fn app() -> Result<()> {
     crownui::run_surfaces(DockSurfaces).context("the dock stopped")

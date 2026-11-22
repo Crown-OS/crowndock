@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use crownui::prelude::{AppWindows, Cx};
 
-use super::state::Dock;
+use super::{HIDDEN, state::Dock};
 use crate::desktop_entry;
 
 /// An app with windows, as the compositor last reported it.
@@ -20,8 +20,23 @@ pub struct RunningApp {
 pub struct Running {
     /// In order of first appearance.
     pub apps: Vec<RunningApp>,
-    /// The app ids whose icon the compositor draws instead of the dock.
-    carried: Vec<String>,
+    /// The icons the compositor is carrying through a window's motion.
+    carried: Vec<Carried>,
+}
+
+/// What the compositor copied when it lifted an icon.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IconCopy {
+    /// The icon, off a shown dock: the dock leaves its own undrawn until it lands.
+    Drawn,
+    /// Nothing, off a hidden dock: the dock keeps drawing its own for the window to land on.
+    Blank,
+}
+
+#[derive(Debug)]
+struct Carried {
+    app_id: String,
+    copy: IconCopy,
 }
 
 impl Running {
@@ -49,13 +64,16 @@ impl Running {
         }
     }
 
-    /// Marks the icon of `app_id` as drawn by the compositor or by the dock; returns whether
-    /// that changed.
-    pub fn carry(&mut self, app_id: &str, carried: bool) -> bool {
-        let held = self.carried.iter().position(|held| held == app_id);
-        match (held, carried) {
-            (None, true) => self.carried.push(app_id.to_owned()),
-            (Some(index), false) => {
+    /// Marks the icon of `app_id` as lifted by the compositor, or landed when `lifted` is
+    /// `None`; returns whether that changed.
+    pub fn carry(&mut self, app_id: &str, lifted: Option<IconCopy>) -> bool {
+        let held = self.carried.iter().position(|held| held.app_id == app_id);
+        match (held, lifted) {
+            (None, Some(copy)) => self.carried.push(Carried {
+                app_id: app_id.to_owned(),
+                copy,
+            }),
+            (Some(index), None) => {
                 self.carried.remove(index);
             }
             _ => return false,
@@ -65,11 +83,19 @@ impl Running {
 
     /// Whether the compositor draws the icon of any of `app_ids`.
     pub fn carries(&self, app_ids: &[String]) -> bool {
-        self.carried.iter().any(|held| {
-            app_ids
-                .iter()
-                .any(|app_id| app_id.eq_ignore_ascii_case(held))
-        })
+        self.carried
+            .iter()
+            .filter(|held| held.copy == IconCopy::Drawn)
+            .any(|held| {
+                app_ids
+                    .iter()
+                    .any(|app_id| app_id.eq_ignore_ascii_case(&held.app_id))
+            })
+    }
+
+    /// Whether a window is on its way into or out of any icon.
+    pub fn carrying(&self) -> bool {
+        !self.carried.is_empty()
     }
 }
 
@@ -81,12 +107,19 @@ pub fn track(cx: &mut Cx, dock: Dock) {
         dock.refresh(cx);
     });
     cx.on_app_icon_lifted(move |cx, app_id, lifted| {
+        let copy = match dock.reveal.get(cx) < HIDDEN {
+            true => IconCopy::Blank,
+            false => IconCopy::Drawn,
+        };
+        let lifted = lifted.then_some(copy);
         if dock
             .running
             .update(cx, |running| running.carry(app_id, lifted))
         {
             dock.refresh(cx);
         }
+        let carrying = dock.running.with(cx, Running::carrying);
+        dock.update_presence(cx, |presence| presence.carrying = carrying);
     });
 }
 
@@ -129,12 +162,22 @@ mod tests {
     #[test]
     fn a_carried_icon_is_held_until_it_lands() {
         let mut running = Running::default();
-        assert!(running.carry("a", true));
-        assert!(!running.carry("a", true));
+        assert!(running.carry("a", Some(IconCopy::Drawn)));
+        assert!(!running.carry("a", Some(IconCopy::Drawn)));
         assert!(running.carries(&["x".into(), "A".into()]));
-        assert!(running.carry("a", false));
-        assert!(!running.carry("a", false));
+        assert!(running.carrying());
+        assert!(running.carry("a", None));
+        assert!(!running.carry("a", None));
         assert!(!running.carries(&["a".into()]));
+        assert!(!running.carrying());
+    }
+
+    #[test]
+    fn an_icon_lifted_off_a_hidden_dock_stays_drawn_while_carried() {
+        let mut running = Running::default();
+        running.carry("a", Some(IconCopy::Blank));
+        assert!(!running.carries(&["a".into()]));
+        assert!(running.carrying());
     }
 
     #[test]

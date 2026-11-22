@@ -37,8 +37,7 @@ pub struct DockSettings {
     pub padding: u16,
     /// Space between the dock and the screen edge.
     pub margin: u16,
-    /// Corner radius; `None` follows the icons' corners, so the dock's squircle is concentric
-    /// with theirs.
+    /// Corner radius; `None` rounds the ends fully.
     pub radius: Option<u16>,
     pub layer: DockLayer,
     /// Slide away until the pointer touches the bottom edge.
@@ -92,8 +91,7 @@ impl Metrics {
     pub fn new(settings: &DockSettings) -> Self {
         let icon = f32::from(settings.icon_size.max(16));
         let padding = f32::from(settings.padding);
-        let height = icon + 2.0 * padding;
-        let concentric = icon * ICON_CORNER + padding;
+        let half_height = (icon + 2.0 * padding) / 2.0;
         Self {
             icon,
             spacing: f32::from(settings.spacing),
@@ -101,8 +99,8 @@ impl Metrics {
             margin: f32::from(settings.margin),
             radius: settings
                 .radius
-                .map_or(concentric, f32::from)
-                .min(height / 2.0),
+                .map_or(half_height, f32::from)
+                .min(half_height),
             hover_scale: settings.hover_scale.clamp(1.0, 2.0),
         }
     }
@@ -182,18 +180,19 @@ mod tests {
     }
 
     #[test]
-    fn the_corners_are_concentric_with_the_icons_unless_set() {
-        let concentric = Metrics::new(&DockSettings::default());
-        assert_eq!(
-            concentric.radius,
-            concentric.icon_radius() + concentric.padding
-        );
-        assert!(concentric.radius < concentric.pill_height() / 2.0);
-        let pill = Metrics::new(&DockSettings {
+    fn the_ends_are_fully_round_unless_a_smaller_radius_is_set() {
+        let pill = Metrics::new(&DockSettings::default());
+        assert_eq!(pill.radius, pill.pill_height() / 2.0);
+        let oversized = Metrics::new(&DockSettings {
             radius: Some(u16::MAX),
             ..DockSettings::default()
         });
-        assert_eq!(pill.radius, pill.pill_height() / 2.0);
+        assert_eq!(oversized.radius, oversized.pill_height() / 2.0);
+        let squircle = Metrics::new(&DockSettings {
+            radius: Some(20),
+            ..DockSettings::default()
+        });
+        assert_eq!(squircle.radius, 20.0);
     }
 
     #[test]
