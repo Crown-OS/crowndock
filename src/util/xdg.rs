@@ -1,4 +1,5 @@
-//! The XDG base directories (freedesktop basedir spec) that hold `.desktop` files.
+//! The XDG base directories (freedesktop basedir spec) that hold `.desktop` and
+//! `mimeapps.list` files.
 
 use std::{
     env,
@@ -9,6 +10,8 @@ use std::{
 const APPLICATIONS: &str = "applications";
 const LOCAL_DATA: &str = ".local/share";
 const SYSTEM_DATA: &str = "/usr/local/share:/usr/share";
+const LOCAL_CONFIG: &str = ".config";
+const SYSTEM_CONFIG: &str = "/etc/xdg";
 
 /// Where applications are installed, the user's own first so they shadow the system's.
 pub fn application_dirs() -> Vec<PathBuf> {
@@ -22,6 +25,16 @@ pub fn application_dirs() -> Vec<PathBuf> {
     .collect()
 }
 
+/// `$XDG_CONFIG_HOME` then `$XDG_CONFIG_DIRS`, the user's own first.
+pub fn config_dirs() -> Vec<PathBuf> {
+    base_dirs(
+        env::var_os("XDG_CONFIG_HOME"),
+        env::var_os("HOME").map(|home| Path::new(&home).join(LOCAL_CONFIG).into()),
+        env::var_os("XDG_CONFIG_DIRS"),
+        SYSTEM_CONFIG,
+    )
+}
+
 /// `$XDG_DATA_HOME` then `$XDG_DATA_DIRS`, each falling back to its default when unset or empty;
 /// relative entries are ignored, as the spec asks.
 fn data_dirs(
@@ -29,10 +42,20 @@ fn data_dirs(
     home: Option<OsString>,
     data_dirs: Option<OsString>,
 ) -> Vec<PathBuf> {
-    let user = non_empty(data_home)
-        .map(PathBuf::from)
-        .or_else(|| non_empty(home).map(|home| Path::new(&home).join(LOCAL_DATA)));
-    let system = non_empty(data_dirs).unwrap_or_else(|| SYSTEM_DATA.into());
+    let home_default = non_empty(home).map(|home| Path::new(&home).join(LOCAL_DATA).into());
+    base_dirs(data_home, home_default, data_dirs, SYSTEM_DATA)
+}
+
+fn base_dirs(
+    user_dir: Option<OsString>,
+    user_default: Option<OsString>,
+    system_dirs: Option<OsString>,
+    system_default: &str,
+) -> Vec<PathBuf> {
+    let user = non_empty(user_dir)
+        .or(non_empty(user_default))
+        .map(PathBuf::from);
+    let system = non_empty(system_dirs).unwrap_or_else(|| system_default.into());
     user.into_iter()
         .chain(env::split_paths(&system))
         .filter(|dir| dir.is_absolute())

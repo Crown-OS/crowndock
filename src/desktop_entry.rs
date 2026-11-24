@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 pub use search::find;
 
 use crate::util::non_default_gpu::GpuPreference;
+use crate::util::web_browser_item::resolve_pinned_item;
 
 /// The extension of `.desktop` files.
 pub const EXTENSION: &str = "desktop";
@@ -25,7 +26,8 @@ pub struct DesktopEntry {
 
 impl DesktopEntry {
     pub fn read(path: &Path) -> Result<Self> {
-        let entry = freedesktop_entry_parser::parse_entry(path)
+        let path = resolve_pinned_item(path);
+        let entry = freedesktop_entry_parser::parse_entry(&path)
             .with_context(|| format!("read {}", path.display()))?;
         let section = entry.section(SECTION);
         Ok(Self {
@@ -50,7 +52,8 @@ impl DesktopEntry {
 /// The app_id the windows of the application `desktop_file` describes are expected to set: its
 /// `StartupWMClass`, or else the file's name without `.desktop`.
 pub fn app_id(desktop_file: &Path) -> Option<String> {
-    DesktopEntry::read(desktop_file)
+    let desktop_file = resolve_pinned_item(desktop_file);
+    DesktopEntry::read(&desktop_file)
         .ok()
         .and_then(|entry| entry.startup_wm_class)
         .or_else(|| Some(desktop_file.file_stem()?.to_str()?.to_owned()))
